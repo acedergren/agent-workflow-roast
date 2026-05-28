@@ -654,6 +654,26 @@ h2 {
   line-height: 1.1;
 }
 
+.spend-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.spend-coverage span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.spend-coverage strong {
+  color: #334155;
+}
+
 .token-spend-chart {
   margin: 0;
 }
@@ -671,6 +691,12 @@ h2 {
 .token-spend-chart figcaption span {
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.token-spend-chart figcaption em {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-style: normal;
 }
 
 .token-spend-chart svg {

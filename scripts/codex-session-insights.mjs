@@ -497,12 +497,18 @@ function buildTokenSpend(stats) {
         projectedCost: estimateEnterpriseCost(itemProjected),
       };
     });
+  const coverage = {
+    startDate: daily[0]?.day || null,
+    endDate: daily.at(-1)?.day || null,
+    days: daily.length,
+  };
   return {
     actual,
     projected,
     measured,
     estimated,
     daily,
+    coverage,
     improvementRate,
     actualCost,
     projectedCost,
@@ -518,8 +524,8 @@ function buildTokenSpend(stats) {
     },
     caveat:
       measured > 0
-        ? "Uses Codex token-count rows and API usage fields where available; remaining rows are estimated from redacted text volume."
-        : "No explicit token usage rows were found, so token spend is estimated from redacted text volume.",
+        ? "Uses local Codex token-count rows and API usage fields where available; remaining rows are estimated from redacted text volume. This excludes usage only visible in corporate dashboards, Codex Web, or other machines."
+        : "No explicit token usage rows were found, so token spend is estimated from redacted text volume. This excludes usage only visible in corporate dashboards, Codex Web, or other machines.",
   };
 }
 
@@ -1817,6 +1823,11 @@ function renderEffectivenessDashboard(metrics, stats = {}) {
         <div><span>Improved scenario</span><strong>${escapeHtml(formatNumber(tokenSpend.projected.total))}</strong><small>tokens</small></div>
         <div><span>API cost delta</span><strong>${escapeHtml(formatCurrency(tokenSpend.savings.cost))}</strong><small>saved</small></div>
       </div>
+      <div class="spend-coverage">
+        <span><strong>Dates:</strong> ${escapeHtml(formatDateRange(tokenSpend.coverage))}</span>
+        <span><strong>Measured:</strong> ${escapeHtml(formatNumber(tokenSpend.measured || 0))} tokens</span>
+        <span><strong>Estimated fallback:</strong> ${escapeHtml(formatNumber(tokenSpend.estimated || 0))} tokens</span>
+      </div>
       ${renderTokenSpendChart(tokenSpend)}
       <p>${escapeHtml(tokenSpend.caveat)} Scenario assumes ${escapeHtml(Math.round(tokenSpend.improvementRate * 100))}% token reduction from applying the recommended artifacts. Cost uses ${escapeHtml(formatCurrency(tokenSpend.rates.inputPerMillion))}/1M input, ${escapeHtml(formatCurrency(tokenSpend.rates.cachedInputPerMillion))}/1M cached input, and ${escapeHtml(formatCurrency(tokenSpend.rates.outputPerMillion))}/1M output tokens.</p>
     </div>
@@ -1870,9 +1881,11 @@ function renderTokenSpendChart(tokenSpend) {
     })
     .join("");
   const lookbackDays = daily.length;
+  const dateRange = formatDateRange(tokenSpend.coverage);
   return `<figure class="token-spend-chart">
     <figcaption>
       <strong>${escapeHtml(lookbackDays)}-day token spend scenario</strong>
+      <em>${escapeHtml(dateRange)}</em>
       <span>${escapeHtml(formatCurrency(tokenSpend.actualCost.total))} actual est. vs ${escapeHtml(formatCurrency(tokenSpend.projectedCost.total))} if improvements land</span>
     </figcaption>
     <svg viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Estimated token spend by day compared with improved scenario">
@@ -1896,6 +1909,9 @@ function buildEmptyTokenSpend() {
     actual: { input: 0, output: 0, total: 0 },
     projected: { input: 0, cachedInput: 0, output: 0, total: 0 },
     daily: [],
+    measured: 0,
+    estimated: 0,
+    coverage: { startDate: null, endDate: null, days: 0 },
     improvementRate: 0,
     actualCost: { total: 0 },
     projectedCost: { total: 0 },
@@ -1921,6 +1937,18 @@ function shortDay(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return value;
   const date = new Date(`${value}T00:00:00Z`);
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function formatDateRange(coverage = {}) {
+  if (!coverage.startDate || !coverage.endDate) return "No dated local token rows";
+  if (coverage.startDate === coverage.endDate) return longDate(coverage.startDate);
+  return `${longDate(coverage.startDate)} - ${longDate(coverage.endDate)}`;
+}
+
+function longDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return value;
+  const date = new Date(`${value}T00:00:00Z`);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function renderCoaching(insights) {

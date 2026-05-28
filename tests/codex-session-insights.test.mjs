@@ -93,6 +93,8 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
   assert.equal(stats.tokenSpend.actual.total < 99900, true);
   assert.equal(stats.tokenSpend.actual.cachedInput >= 500, true);
   assert.equal(stats.tokenSpend.daily.length >= 1, true);
+  assert.ok(stats.tokenSpend.coverage.startDate);
+  assert.ok(stats.tokenSpend.coverage.endDate);
 });
 
 test("analyzeRows stores short redacted evidence snippets", () => {
@@ -166,6 +168,8 @@ test("renderers include required report sections", () => {
   assert.match(html, /Coaching Targets/);
   assert.match(html, /token spend scenario/);
   assert.match(html, /API cost delta/);
+  assert.match(html, /Dates:/);
+  assert.match(html, /Measured:/);
   assert.match(html, /Coach&#39;s Read/);
   assert.match(html, /Custom Instructions/);
   assert.match(html, /Create These Artifacts/);

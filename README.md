@@ -68,7 +68,7 @@ The command prints the generated path. Default HTML reports are written under th
 
 Codex Insights reads local Codex history, session, and memory files. Before synthesis or rendering, it redacts obvious secrets, bearer tokens, GitHub tokens, API-key assignments, passwords, URLs, emails, private-key blocks, and noisy config-looking evidence snippets.
 
-Token spend prefers measured Codex `token_count` rows and API `usage` fields, including cached input tokens when present. If no measured token data exists for a row, the report falls back to a redacted text-volume estimate and labels the chart accordingly.
+Token spend prefers measured Codex `token_count` rows and API `usage` fields, including cached input tokens when present. The chart shows the exact local date range and measured-versus-estimated split. If no measured token data exists for a row, the report falls back to a redacted text-volume estimate and labels the chart accordingly. Corporate dashboards may include additional Codex Web, cloud task, workspace, or other-machine usage that is not present in local `~/.codex` files.
 
 By default, the analyzer attempts qualitative synthesis with `codex exec` using a bounded, redacted payload. Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when you want deterministic local-only coaching without sending that payload through a model call. If synthesis fails or returns unusable JSON, the deterministic report still renders.
 
