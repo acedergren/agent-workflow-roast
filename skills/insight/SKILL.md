@@ -19,6 +19,7 @@ Use this skill when the user asks for `@insight`, `/insight`, or an operational 
 
    ```bash
    node scripts/codex-session-insights.mjs --days 30 --no-memory
+   node scripts/codex-session-insights.mjs --no-ai
    node scripts/codex-session-insights.mjs --export markdown
    ```
 

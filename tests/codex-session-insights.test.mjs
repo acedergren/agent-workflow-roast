@@ -7,11 +7,13 @@ import assert from "node:assert/strict";
 import {
   analyzeRows,
   applySessionCwd,
+  buildCoachingPrompt,
   buildDeterministicInsights,
   buildReport,
   cleanupOldTempReports,
   loadInputs,
   parseArgs,
+  parseCodexJsonOutput,
   parseJsonl,
   readJsonlTail,
   redactSecrets,
@@ -103,7 +105,46 @@ test("renderers include required report sections", () => {
 
   assert.match(html, /Workflow Pattern Map/);
   assert.match(html, /Top Improvements/);
+  assert.match(html, /Coach&#39;s Read/);
   assert.match(markdown, /Ready-to-use Prompt Patterns/);
+  assert.match(markdown, /Prompt Quality/);
+});
+
+test("buildCoachingPrompt asks for actionable coaching schema", () => {
+  const stats = analyzeRows([{ cwd: "/tmp/codex-insights", content: "missing verification caused retry" }]);
+  const prompt = buildCoachingPrompt(stats, []);
+
+  assert.match(prompt, /engineering coach/);
+  assert.match(prompt, /frictionAnalysis/);
+  assert.match(prompt, /promptQuality/);
+});
+
+test("parseCodexJsonOutput extracts JSON from event streams", () => {
+  const output = [
+    JSON.stringify({ type: "started" }),
+    JSON.stringify({ output: '```json\\n{"summary":"ok","improvements":[],"instructions":[],"prompts":[]}\\n```' }),
+  ].join("\n");
+
+  const parsed = parseCodexJsonOutput(output);
+
+  assert.equal(parsed.summary, "ok");
+});
+
+test("parseCodexJsonOutput extracts nested codex item text", () => {
+  const output = [
+    JSON.stringify({ type: "turn.started" }),
+    JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "agent_message",
+        text: '{"summary":"nested","improvements":[],"instructions":[],"prompts":[]}',
+      },
+    }),
+  ].join("\n");
+
+  const parsed = parseCodexJsonOutput(output);
+
+  assert.equal(parsed.summary, "nested");
 });
 
 test("loadInputs handles missing memory and malformed jsonl", () => {
@@ -153,10 +194,11 @@ test("cleanupOldTempReports removes stale report directories", () => {
 });
 
 test("parseArgs supports plan options", () => {
-  const options = parseArgs(["--days", "30", "--no-memory", "--export", "json", "--no-open"]);
+  const options = parseArgs(["--days", "30", "--no-memory", "--export", "json", "--no-open", "--no-ai"]);
 
   assert.equal(options.days, 30);
   assert.equal(options.includeMemory, false);
   assert.equal(options.exportFormat, "json");
   assert.equal(options.open, false);
+  assert.equal(options.useAi, false);
 });

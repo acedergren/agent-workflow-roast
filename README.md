@@ -8,6 +8,7 @@ Codex Insights is a local Codex plugin that turns recent Codex session history a
 - Adds an `@insight` skill trigger for conversational use.
 - Reads `~/.codex/history.jsonl`, `~/.codex/sessions/**/*.jsonl`, and, by default, `~/.codex/memories/MEMORY.md`.
 - Redacts obvious secrets before synthesis and rendering.
+- Uses an LLM coaching pass to turn raw stats into a working-style narrative, friction coaching, prompt-quality feedback, generated rules, and ready-to-use prompts.
 - Writes reports to a short-lived temp directory by default.
 - Persists output only when `--export markdown|html|json` is supplied.
 
@@ -40,6 +41,7 @@ The command prints the generated report path. On macOS, default ephemeral HTML r
 - `skills/insight/SKILL.md` defines the `@insight` skill trigger.
 - `scripts/codex-session-insights.mjs` ingests, analyzes, redacts, synthesizes, and writes reports.
 - `templates/report.html` and `assets/report.css` render the compact dashboard UI.
+- `playgrounds/insights-coach-playground.html` is a single-file playground for tuning the coaching prompt and expected report shape.
 - `tests/codex-session-insights.test.mjs` covers parsing, grouping, redaction, rendering, export, and temp cleanup.
 
 ## Options
@@ -50,6 +52,7 @@ The command prints the generated report path. On macOS, default ephemeral HTML r
 --export markdown|html|json Persist a report instead of temp-only HTML
 --output <path>             Output path for --export
 --no-open                   Do not open generated HTML
+--no-ai                     Skip codex exec synthesis and use deterministic coaching
 --codex-home <path>         Override ~/.codex input root
 ```
 
@@ -70,6 +73,8 @@ npm run validate:plugin
 ## Privacy Model
 
 Codex Insights is local-first. It reads local Codex session and memory files, redacts obvious secrets, and creates ephemeral reports under the OS temp directory unless export is explicit. Qualitative synthesis uses `codex exec` when available; if that call fails or returns unusable JSON, the deterministic report still renders.
+
+Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when you want session-only deterministic coaching without sending the bounded, redacted synthesis payload through `codex exec`.
 
 ## Status
 

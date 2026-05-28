@@ -45,6 +45,13 @@ const FRICTION_MARKERS = [
   "missing",
 ];
 
+const NOISY_EXAMPLE_PATTERNS = [
+  /You are judging one planned coding-agent action/i,
+  /Base Risk Taxonomy/i,
+  /Outcome Policy/i,
+  /strict JSON/i,
+];
+
 export function parseArgs(argv) {
   const options = {
     days: DEFAULT_DAYS,
@@ -53,6 +60,7 @@ export function parseArgs(argv) {
     output: null,
     open: process.env.CI !== "1",
     codexHome: process.env.CODEX_HOME || join(homedir(), ".codex"),
+    useAi: process.env.CODEX_INSIGHTS_NO_AI !== "1",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -73,6 +81,8 @@ export function parseArgs(argv) {
       options.output = arg.split("=", 2)[1];
     } else if (arg === "--no-open") {
       options.open = false;
+    } else if (arg === "--no-ai") {
+      options.useAi = false;
     } else if (arg === "--codex-home") {
       options.codexHome = argv[++index];
     } else if (arg.startsWith("--codex-home=")) {
@@ -234,13 +244,20 @@ export function analyzeRows(rows, options = {}) {
     for (const marker of FRICTION_MARKERS) {
       if (lower.includes(marker)) stats.friction.set(marker, (stats.friction.get(marker) || 0) + 1);
     }
-    if (stats.examples.length < 12 && text) {
+    if (stats.examples.length < 18 && isUsefulExample(text)) {
       stats.examples.push(text.slice(0, 420));
     }
   }
 
   stats.sessions = Math.max(1, stats.projects.size === 0 ? 0 : stats.projects.size);
   return serializeStats(stats);
+}
+
+function isUsefulExample(text) {
+  if (!text || text.length < 20) return false;
+  if (NOISY_EXAMPLE_PATTERNS.some((pattern) => pattern.test(text))) return false;
+  const lower = text.toLowerCase();
+  return FRICTION_MARKERS.some((marker) => lower.includes(marker)) || /please|can you|fix|test|verify|review/.test(lower);
 }
 
 function serializeStats(stats) {
@@ -281,6 +298,25 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
   const topFriction = stats.friction[0]?.name || "context drift";
   return {
     summary: `Recent activity is concentrated around ${mainProject}, with ${topTool} as the strongest tool signal and ${topFriction} as the leading friction marker.`,
+    atAGlance: {
+      working: `You are keeping a lot of work moving through ${mainProject}.`,
+      hindering: `The recurring marker to investigate is ${topFriction}; it is probably a symptom, not the root cause.`,
+      quickWins: "Start ambiguous tasks with the expected proof artifact and stop condition.",
+      ambitious: "Turn repeated corrections into durable local instructions, hooks, or command defaults.",
+    },
+    narrative: `Your recent Codex workflow looks execution-heavy and verification-oriented, with most attention landing on ${mainProject}. The next leverage point is converting repeated friction into clearer pre-flight prompts and reusable rules.`,
+    frictionAnalysis: stats.friction.slice(0, 4).map((item) => ({
+      category: titleCase(item.name),
+      count: item.count,
+      evidence: stats.examples.find((example) => example.toLowerCase().includes(item.name)) || "Repeated marker found in recent session text.",
+      coaching: recommendationForSignal(item.name),
+      rule: instructionForSignal(item.name, mainProject),
+    })),
+    promptQuality: {
+      score: 72,
+      diagnosis: "Prompts appear action-oriented, but many would benefit from explicit acceptance proof and boundaries.",
+      betterPrompt: `For ${mainProject}, first restate the desired outcome, constraints, and verification command. Then implement the smallest change and report the proof.`,
+    },
     improvements: [
       {
         title: "Start reports from bounded evidence",
@@ -311,28 +347,118 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
 }
 
 export function tryCodexSynthesis(stats, memoryHits) {
-  const payload = redactSecrets({ stats, memoryHits });
-  const prompt = [
-    "Return compact JSON with keys summary, improvements, instructions, prompts.",
-    "Each improvement must have title and body. Keep it operational and specific.",
-    payload,
-  ].join("\n\n");
+  const prompt = buildCoachingPrompt(stats, memoryHits);
   const result = spawnSync("codex", ["exec", "--skip-git-repo-check", "--json", prompt], {
     encoding: "utf8",
-    timeout: 45_000,
-    maxBuffer: 1024 * 1024,
+    input: "",
+    timeout: 180_000,
+    maxBuffer: 2 * 1024 * 1024,
   });
   if (result.status !== 0 || !result.stdout) return null;
-  const jsonLine = result.stdout
-    .split(/\r?\n/)
-    .reverse()
-    .find((line) => line.trim().startsWith("{"));
-  if (!jsonLine) return null;
+  return parseCodexJsonOutput(result.stdout);
+}
+
+export function buildCoachingPrompt(stats, memoryHits) {
+  const payload = redactSecrets({
+    stats: {
+      totalRows: stats.totalRows,
+      projects: stats.projects.slice(0, 8),
+      tools: stats.tools.slice(0, 8),
+      friction: stats.friction.slice(0, 8),
+      examples: stats.examples.slice(0, 12),
+    },
+    memoryHits: memoryHits.slice(0, 8),
+  });
+  return [
+    "You are an exacting but kind engineering coach reviewing recent Codex session patterns.",
+    "The raw counts have already been computed. Your job is to turn them into a human-understandable retrospective with concrete coaching.",
+    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, and ready-to-use prompts.",
+    "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
+    "Return only one JSON object. No markdown fences.",
+    "Required JSON shape:",
+    JSON.stringify(
+      {
+        summary: "one paragraph with the core workflow insight",
+        atAGlance: {
+          working: "what is working",
+          hindering: "what is slowing the user down",
+          quickWins: "one concrete change to try next",
+          ambitious: "one higher-leverage workflow to build",
+        },
+        narrative: "a personal working-style read grounded in the data",
+        frictionAnalysis: [
+          {
+            category: "friction category name",
+            count: 3,
+            evidence: "short redacted example or observed pattern from payload",
+            coaching: "specific behavior change",
+            rule: "copy-ready AGENTS.md or local instruction rule",
+          },
+        ],
+        promptQuality: {
+          score: 72,
+          diagnosis: "prompt quality diagnosis",
+          betterPrompt: "copy-ready improved prompt pattern",
+        },
+        improvements: [{ title: "imperative title", body: "why it matters and what to do" }],
+        instructions: ["copy-ready instruction changes"],
+        prompts: ["copy-ready prompts"],
+      },
+      null,
+      2,
+    ),
+    "Payload:",
+    payload,
+  ].join("\n\n");
+}
+
+export function parseCodexJsonOutput(stdout) {
+  const candidates = [stdout];
+  for (const line of stdout.split(/\r?\n/).filter((item) => item.trim())) {
+    try {
+      const event = JSON.parse(line);
+      const content =
+        event.message?.content ||
+        event.item?.text ||
+        event.output ||
+        event.final ||
+        event.response ||
+        event.text;
+      if (typeof content === "string") candidates.push(content);
+      for (const value of Object.values(event)) {
+        if (typeof value === "string") candidates.push(value);
+      }
+    } catch {
+      candidates.push(line);
+    }
+  }
+  for (const candidate of candidates.reverse()) {
+    const parsed = parseJsonObjectFromText(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function parseJsonObjectFromText(text) {
+  if (!text) return null;
+  const trimmed = String(text).trim();
+  const direct = tryParseJson(trimmed);
+  if (direct) return direct;
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) {
+    const parsed = tryParseJson(fenced[1].trim());
+    if (parsed) return parsed;
+  }
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start !== -1 && end > start) return tryParseJson(trimmed.slice(start, end + 1));
+  return null;
+}
+
+function tryParseJson(text) {
   try {
-    const parsed = JSON.parse(jsonLine);
-    const text = parsed.message?.content || parsed.output || parsed.final || parsed.response || "";
-    const match = String(text).match(/\{[\s\S]*\}/);
-    return match ? JSON.parse(match[0]) : null;
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
   }
@@ -379,6 +505,13 @@ export function renderHtml(report) {
     )}</div>`,
   );
 
+  const coaching = panel(
+    "Coach's Read",
+    '<p class="subtle">Human-readable synthesis after the raw signals are cooked down</p>',
+    renderCoaching(report.insights),
+    "panel coaching-panel",
+  );
+
   const prompts = panel(
     "Ready-to-use Prompt Patterns",
     "",
@@ -419,6 +552,7 @@ export function renderHtml(report) {
     .replace("{{stats}}", stats)
     .replace("{{projectMap}}", projectMap)
     .replace("{{improvements}}", improvements)
+    .replace("{{coaching}}", coaching)
     .replace("{{prompts}}", prompts)
     .replace("{{friction}}", friction)
     .replace("{{instructions}}", instructions)
@@ -427,6 +561,13 @@ export function renderHtml(report) {
 
 export function renderMarkdown(report) {
   const lines = [`# ${report.title}`, "", report.insights.summary, "", "## At a Glance"];
+  const glance = report.insights.atAGlance || {};
+  lines.push(`- What is working: ${glance.working || "Enough signal exists to identify active project areas."}`);
+  lines.push(`- What is hindering: ${glance.hindering || "Recurring friction markers need interpretation."}`);
+  lines.push(`- Quick win: ${glance.quickWins || "Add proof expectations before execution."}`);
+  lines.push(`- Ambitious workflow: ${glance.ambitious || "Promote repeated fixes into durable instructions."}`);
+  lines.push("", "## Coach's Read", "", report.insights.narrative || report.insights.summary);
+  lines.push("", "## Stats Snapshot");
   lines.push(`- Rows analyzed: ${report.stats.totalRows}`);
   lines.push(`- Projects: ${report.stats.projects.length}`);
   lines.push(`- Tool signals: ${report.stats.tools.length}`);
@@ -435,6 +576,16 @@ export function renderMarkdown(report) {
   for (const item of report.stats.projects) lines.push(`- ${item.name}: ${item.count}`);
   lines.push("", "## Top Improvements");
   for (const item of report.insights.improvements) lines.push(`- ${item.title}: ${item.body}`);
+  lines.push("", "## Friction Coaching");
+  for (const item of report.insights.frictionAnalysis || []) {
+    lines.push(`- ${item.category}: ${item.coaching} Rule: ${item.rule}`);
+  }
+  if (report.insights.promptQuality) {
+    lines.push("", "## Prompt Quality");
+    lines.push(`- Score: ${report.insights.promptQuality.score}`);
+    lines.push(`- Diagnosis: ${report.insights.promptQuality.diagnosis}`);
+    lines.push(`- Better prompt: ${report.insights.promptQuality.betterPrompt}`);
+  }
   lines.push("", "## Suggested Instruction Changes");
   for (const item of report.insights.instructions) lines.push(`- ${item}`);
   lines.push("", "## Ready-to-use Prompt Patterns");
@@ -537,7 +688,7 @@ export function applySessionCwd(rows) {
 export function buildReport(inputs, options) {
   const stats = analyzeRows(inputs.rows, { days: options.days, malformedRows: inputs.malformedRows });
   const memoryHits = options.includeMemory ? selectMemoryHits(inputs.memoryText, stats.projects) : [];
-  const aiInsights = process.env.CODEX_INSIGHTS_NO_AI === "1" ? null : tryCodexSynthesis(stats, memoryHits);
+  const aiInsights = options.useAi === false ? null : tryCodexSynthesis(stats, memoryHits);
   const insights = normalizeInsights(aiInsights) || buildDeterministicInsights(stats, memoryHits);
   return {
     title: `Codex Session Insights (${options.days} days)`,
@@ -556,12 +707,44 @@ function normalizeInsights(value) {
   }
   return {
     summary: String(value.summary || "Recent Codex activity was analyzed."),
+    atAGlance: normalizeAtAGlance(value.atAGlance),
+    narrative: String(value.narrative || value.summary || "Recent Codex activity was analyzed."),
+    frictionAnalysis: Array.isArray(value.frictionAnalysis)
+      ? value.frictionAnalysis.slice(0, 6).map((item) => ({
+          category: String(item.category || "Friction"),
+          count: Number.isFinite(Number(item.count)) ? Number(item.count) : 0,
+          evidence: String(item.evidence || "Pattern detected in recent sessions."),
+          coaching: String(item.coaching || "Clarify the desired proof before execution."),
+          rule: String(item.rule || "State the expected verification before marking work complete."),
+        }))
+      : [],
+    promptQuality: normalizePromptQuality(value.promptQuality),
     improvements: value.improvements.slice(0, 5).map((item) => ({
       title: String(item.title || "Improvement"),
       body: String(item.body || item),
     })),
     instructions: value.instructions.slice(0, 5).map(String),
     prompts: value.prompts.slice(0, 5).map(String),
+  };
+}
+
+function normalizeAtAGlance(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    working: String(source.working || "The sessions contain enough signal to identify recurring work patterns."),
+    hindering: String(source.hindering || "Some friction categories repeat often enough to deserve explicit rules."),
+    quickWins: String(source.quickWins || "Add proof expectations to prompts before implementation starts."),
+    ambitious: String(source.ambitious || "Create reusable instructions from repeated corrections."),
+  };
+}
+
+function normalizePromptQuality(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const score = Number(source.score);
+  return {
+    score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 70,
+    diagnosis: String(source.diagnosis || "Prompt quality is workable, but acceptance proof and boundaries should be clearer."),
+    betterPrompt: String(source.betterPrompt || "Before implementing, restate the goal, constraints, smallest change, and exact verification proof."),
   };
 }
 
@@ -658,6 +841,46 @@ function renderFrictionTable(friction) {
   </table></div>`;
 }
 
+function renderCoaching(insights) {
+  const glance = insights.atAGlance || {};
+  const promptQuality = insights.promptQuality || {};
+  const friction = insights.frictionAnalysis || [];
+  return `<div class="coach-grid">
+    <article class="coach-narrative">
+      <h3>Working style</h3>
+      <p>${escapeHtml(insights.narrative || insights.summary)}</p>
+    </article>
+    <div class="glance-grid">
+      ${coachTile("Working", glance.working)}
+      ${coachTile("Hindering", glance.hindering)}
+      ${coachTile("Quick win", glance.quickWins)}
+      ${coachTile("Ambitious", glance.ambitious)}
+    </div>
+    <article class="prompt-quality">
+      <div class="score-ring">${escapeHtml(promptQuality.score || 70)}</div>
+      <div>
+        <h3>Prompt quality</h3>
+        <p>${escapeHtml(promptQuality.diagnosis || "Prompt quality is workable, but acceptance proof and boundaries should be clearer.")}</p>
+        <code>${escapeHtml(promptQuality.betterPrompt || "Restate the goal, constraints, smallest change, and exact verification proof.")}</code>
+      </div>
+    </article>
+    <div class="friction-coaching">
+      ${listOrEmpty(
+        friction,
+        (item) => `<article class="coach-rule">
+          <div><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.count)} signals</span></div>
+          <p>${escapeHtml(item.coaching)}</p>
+          <code>${escapeHtml(item.rule)}</code>
+        </article>`,
+      )}
+    </div>
+  </div>`;
+}
+
+function coachTile(label, body) {
+  return `<article class="coach-tile"><strong>${escapeHtml(label)}</strong><p>${escapeHtml(body || "No strong signal found yet.")}</p></article>`;
+}
+
 function titleCase(value) {
   return String(value)
     .replaceAll("-", " ")
@@ -692,6 +915,19 @@ function recommendationForSignal(signal) {
   return "Refresh environment facts before acting on older context.";
 }
 
+function instructionForSignal(signal, project) {
+  if (/auth|permission/.test(signal)) {
+    return `Before debugging auth in ${project}, verify the active profile, token freshness, and exact failing boundary.`;
+  }
+  if (/failed|missing|error/.test(signal)) {
+    return "Do not mark work complete until tests, logs, screenshots, or command output prove the requested behavior.";
+  }
+  if (/blocked|retry|timeout/.test(signal)) {
+    return "If the same step repeats twice, pause and write the current hypothesis, blocker, and smallest next probe.";
+  }
+  return "Refresh drift-prone environment facts before relying on older assumptions.";
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -710,6 +946,7 @@ Options:
   --export markdown|html|json Persist a report instead of temp-only HTML
   --output <path>            Output path for --export
   --no-open                  Do not open the generated HTML
+  --no-ai                    Skip codex exec synthesis and use deterministic coaching
   --codex-home <path>        Override ~/.codex input root
 `);
 }

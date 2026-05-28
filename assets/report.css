@@ -540,6 +540,96 @@ h2 {
   margin-top: 14px;
 }
 
+.coaching-panel {
+  margin-top: 14px;
+}
+
+.coach-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 14px;
+  padding: 0 18px 18px;
+}
+
+.coach-narrative,
+.prompt-quality,
+.coach-rule,
+.coach-tile {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.coach-narrative {
+  padding: 18px;
+}
+
+.coach-narrative p,
+.prompt-quality p,
+.coach-rule p,
+.coach-tile p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.glance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.coach-tile {
+  padding: 12px;
+}
+
+.coach-tile strong,
+.coach-rule strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: #1e293b;
+}
+
+.prompt-quality {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  grid-column: 1 / -1;
+  padding: 16px;
+}
+
+.score-ring {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  color: var(--blue);
+  background:
+    radial-gradient(circle at center, #fff 55%, transparent 56%),
+    conic-gradient(var(--blue) 0 72%, #dbe5f2 72% 100%);
+  font-weight: 820;
+}
+
+.friction-coaching {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.coach-rule {
+  padding: 14px;
+}
+
+.coach-rule span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .table-wrap {
   overflow-x: auto;
   padding: 0 18px 18px;
@@ -628,7 +718,9 @@ code {
 
 @media (max-width: 1240px) {
   .top-grid,
-  .bottom-grid {
+  .bottom-grid,
+  .coach-grid,
+  .friction-coaching {
     grid-template-columns: 1fr;
   }
 

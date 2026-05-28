@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Insights Coach Playground</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1118;
+        --panel: #121b26;
+        --panel-2: #172333;
+        --line: #26364a;
+        --text: #eef5ff;
+        --muted: #9fb0c4;
+        --blue: #65a3ff;
+        --green: #70d69a;
+        --orange: #f2b25d;
+        --purple: #b79cff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 340px minmax(0, 1fr);
+        gap: 18px;
+        min-height: 100vh;
+        padding: 18px;
+      }
+
+      aside,
+      main,
+      .prompt-box {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      aside {
+        padding: 18px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+      }
+
+      h2 {
+        font-size: 0.82rem;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        margin: 14px 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      select,
+      input,
+      textarea,
+      button {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--panel-2);
+        color: var(--text);
+        font: inherit;
+      }
+
+      select,
+      input,
+      button {
+        min-height: 38px;
+        padding: 0 10px;
+      }
+
+      textarea {
+        min-height: 92px;
+        padding: 10px;
+        resize: vertical;
+      }
+
+      .preset-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .primary {
+        background: #1f5fbf;
+        border-color: #3a7ee3;
+      }
+
+      main {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .preview {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 14px;
+      }
+
+      .card {
+        padding: 16px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .glance {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .pill {
+        display: inline-flex;
+        width: fit-content;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgb(101 163 255 / 0.14);
+        color: var(--blue);
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .rule {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      code {
+        display: block;
+        white-space: pre-wrap;
+        color: #d8e7ff;
+      }
+
+      .prompt-box {
+        padding: 14px;
+      }
+
+      .prompt-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .prompt-head button {
+        width: 110px;
+      }
+
+      pre {
+        margin: 10px 0 0;
+        color: #d6e4f7;
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 900px) {
+        .shell,
+        .preview {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <h1>Insights Coach Playground</h1>
+        <p>Explore how the LLM pass should turn raw session signals into coaching.</p>
+
+        <h2>Presets</h2>
+        <div class="preset-row">
+          <button data-preset="exec">Execution Coach</button>
+          <button data-preset="design">Design Iteration</button>
+          <button data-preset="prompt">Prompt Fluency</button>
+          <button data-preset="rules">Rules Export</button>
+        </div>
+
+        <label>
+          Coaching tone
+          <select id="tone">
+            <option value="direct">Direct and kind</option>
+            <option value="gentle">Gentle mentor</option>
+            <option value="sharp">Sharp retro</option>
+          </select>
+        </label>
+
+        <label>
+          Primary outcome
+          <select id="outcome">
+            <option value="rules">Copy-ready local rules</option>
+            <option value="prompts">Better prompts</option>
+            <option value="friction">Friction diagnosis</option>
+            <option value="style">Working-style read</option>
+          </select>
+        </label>
+
+        <label>
+          Evidence strictness
+          <input id="strictness" type="range" min="1" max="5" value="4" />
+        </label>
+
+        <label>
+          Example friction
+          <textarea id="friction">Missing acceptance proof; repeated auth drift; long planning loop before first change.</textarea>
+        </label>
+      </aside>
+
+      <main>
+        <section class="preview">
+          <article class="card">
+            <span class="pill">Coach's read</span>
+            <h2 id="readTitle">Execution-heavy, proof-hungry workflow</h2>
+            <p id="narrative"></p>
+          </article>
+          <article class="card">
+            <span class="pill">At a glance</span>
+            <div class="glance" id="glance"></div>
+          </article>
+        </section>
+
+        <section class="card">
+          <span class="pill">Generated rules</span>
+          <div id="rules"></div>
+        </section>
+
+        <section class="prompt-box">
+          <div class="prompt-head">
+            <h2>Prompt to use in the analyzer</h2>
+            <button class="primary" id="copy">Copy</button>
+          </div>
+          <pre id="prompt"></pre>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const defaults = {
+        tone: "direct",
+        outcome: "rules",
+        strictness: 4,
+        friction: "Missing acceptance proof; repeated auth drift; long planning loop before first change.",
+      };
+      const state = { ...defaults };
+      const presets = {
+        exec: { tone: "direct", outcome: "rules", strictness: 4 },
+        design: { tone: "gentle", outcome: "friction", strictness: 3, friction: "Visual mismatch corrections; spacing drift; icons did not match the mockup." },
+        prompt: { tone: "sharp", outcome: "prompts", strictness: 5, friction: "Ambiguous asks; acceptance criteria missing; too much implementation before alignment." },
+        rules: { tone: "direct", outcome: "rules", strictness: 5, friction: "Repeated workaround rediscovery; stale environment assumptions; missing durable instruction updates." },
+      };
+
+      const elements = {
+        tone: document.getElementById("tone"),
+        outcome: document.getElementById("outcome"),
+        strictness: document.getElementById("strictness"),
+        friction: document.getElementById("friction"),
+        narrative: document.getElementById("narrative"),
+        glance: document.getElementById("glance"),
+        rules: document.getElementById("rules"),
+        prompt: document.getElementById("prompt"),
+        copy: document.getElementById("copy"),
+      };
+
+      function syncControls() {
+        elements.tone.value = state.tone;
+        elements.outcome.value = state.outcome;
+        elements.strictness.value = state.strictness;
+        elements.friction.value = state.friction;
+      }
+
+      function updateAll() {
+        const strict = Number(state.strictness);
+        const toneLabel = state.tone === "sharp" ? "blunt but useful" : state.tone === "gentle" ? "encouraging" : "direct and kind";
+        elements.narrative.textContent = `Use a ${toneLabel} voice. Treat the raw counts as evidence, then explain the working style, the likely root causes, and the next behavior change without pretending weak signals are certain.`;
+        elements.glance.innerHTML = [
+          ["Working", "Preserve visible evidence, verification loops, and concrete project context."],
+          ["Hindering", state.friction],
+          ["Quick win", state.outcome === "prompts" ? "Rewrite the first prompt with proof and boundaries." : "Add one copy-ready rule for the top friction category."],
+          ["Ambitious", "Build a repeatable weekly reflection that tracks whether the rules reduce friction."],
+        ]
+          .map(([title, body]) => `<article class="card"><strong>${title}</strong><p>${body}</p></article>`)
+          .join("");
+        elements.rules.innerHTML = state.friction
+          .split(";")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map((item) => `<div class="rule"><strong>${item}</strong><code>When this pattern appears, pause, name the evidence, and produce a copy-ready instruction that prevents recurrence.</code></div>`)
+          .join("");
+        elements.prompt.textContent = buildPrompt(strict);
+      }
+
+      function buildPrompt(strict) {
+        const parts = [
+          "Turn raw Codex session stats into human-readable coaching.",
+          `Use a ${state.tone} coaching tone.`,
+          `Optimize for ${state.outcome}.`,
+          `Evidence strictness is ${strict}/5: ${strict >= 4 ? "label weak evidence and avoid overclaiming" : "allow more interpretive coaching"}.`,
+          `Top observed friction: ${state.friction}`,
+          "Return JSON with summary, atAGlance, narrative, frictionAnalysis, promptQuality, improvements, instructions, and prompts.",
+        ];
+        return parts.join("\n");
+      }
+
+      for (const key of ["tone", "outcome", "strictness", "friction"]) {
+        elements[key].addEventListener("input", (event) => {
+          state[key] = event.target.value;
+          updateAll();
+        });
+      }
+      document.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          Object.assign(state, defaults, presets[button.dataset.preset]);
+          syncControls();
+          updateAll();
+        });
+      });
+      elements.copy.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(elements.prompt.textContent);
+        elements.copy.textContent = "Copied!";
+        setTimeout(() => (elements.copy.textContent = "Copy"), 900);
+      });
+
+      syncControls();
+      updateAll();
+    </script>
+  </body>
+</html>

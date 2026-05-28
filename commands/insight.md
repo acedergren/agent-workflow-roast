@@ -1,6 +1,6 @@
 ---
 description: Generate an ephemeral Codex session insights report
-argument-hint: [--days 30] [--no-memory] [--export markdown|html|json]
+argument-hint: [--days 30] [--no-memory] [--no-ai] [--export markdown|html|json]
 allowed-tools: [Bash, Read]
 ---
 
