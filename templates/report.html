@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}}</title>
+    <style>{{css}}</style>
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">C</span>Codex</div>
+        <nav class="nav">
+          <a>Sessions</a>
+          <a>Tasks</a>
+          <a class="active">Insights</a>
+          <a>Projects</a>
+          <a>Agents</a>
+          <a>AGENTS.md</a>
+          <a>Settings</a>
+        </nav>
+        <div class="profile"><span>JS</span>Jane Smith</div>
+      </aside>
+      <main class="workspace">
+        <div class="browser-tab">
+          <span>/insight</span>
+        </div>
+        <header class="command-bar">
+          <div class="command-title"><span class="back">&lt;</span><strong>/insight</strong></div>
+          <div class="command-status">Generated from recent Codex sessions</div>
+          <div class="command-time">Today, 9:42 AM</div>
+          <div class="chips">
+            <span>ephemeral</span>
+            <span>local only</span>
+            <span>memory-aware</span>
+          </div>
+        </header>
+        <section class="top-grid">
+          {{stats}}
+          {{projectMap}}
+          {{improvements}}
+        </section>
+        {{friction}}
+        <section class="bottom-grid">
+          {{instructions}}
+          {{prompts}}
+          {{memory}}
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
