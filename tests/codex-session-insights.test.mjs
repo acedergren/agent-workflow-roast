@@ -33,10 +33,11 @@ test("parseJsonl keeps valid rows and reports malformed lines", () => {
 });
 
 test("redactSecrets removes obvious tokens and credentials", () => {
-  const input = "Bearer abc.def.ghi password = super-secret OPENAI_API_KEY=sk-real ghp_abcdefghijklmnopqrstuvwxyz";
+  const input =
+    "Bearer abc.def.ghi password = super-secret OPENAI_API_KEY=sk-real ghp_abcdefghijklmnopqrstuvwxyz https://internal.example.test user@example.com";
   const redacted = redactSecrets(input);
 
-  assert.doesNotMatch(redacted, /super-secret|sk-real|ghp_/);
+  assert.doesNotMatch(redacted, /super-secret|sk-real|ghp_|internal\.example|user@example/);
   assert.match(redacted, /\[REDACTED\]/);
 });
 
@@ -63,6 +64,19 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
   assert.equal(stats.projects[0].name, "codex-insights");
   assert.equal(stats.tools.find((item) => item.name === "exec_command").count, 1);
   assert.ok(stats.friction.some((item) => item.name === "failed"));
+});
+
+test("analyzeRows stores short redacted evidence snippets", () => {
+  const stats = analyzeRows([
+    {
+      timestamp: new Date().toISOString(),
+      cwd: "/tmp/codex-insights",
+      content: "base_url = https://internal.example.test\nTests failed because auth config was stale.",
+    },
+  ]);
+
+  assert.equal(stats.examples[0], "Tests failed because auth config was stale.");
+  assert.doesNotMatch(stats.examples.join("\n"), /internal\.example|base_url/);
 });
 
 test("applySessionCwd carries session cwd into later rows", () => {

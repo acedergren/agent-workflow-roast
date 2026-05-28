@@ -26,6 +26,8 @@ const MAX_SESSION_FILES = 200;
 const SECRET_PATTERNS = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
   /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+  /https?:\/\/[^\s"'<>]+/gi,
   /\b[A-Za-z0-9_]*API[_-]?KEY[A-Za-z0-9_]*\s*[:=]\s*["']?[^"'\s,;]+/gi,
   /\b[A-Za-z0-9_]*TOKEN[A-Za-z0-9_]*\s*[:=]\s*["']?[^"'\s,;]+/gi,
   /\bpassword\s*[:=]\s*["']?[^"'\s,;]+/gi,
@@ -245,7 +247,7 @@ export function analyzeRows(rows, options = {}) {
       if (lower.includes(marker)) stats.friction.set(marker, (stats.friction.get(marker) || 0) + 1);
     }
     if (stats.examples.length < 18 && isUsefulExample(text)) {
-      stats.examples.push(text.slice(0, 420));
+      stats.examples.push(buildEvidenceSnippet(text));
     }
   }
 
@@ -258,6 +260,20 @@ function isUsefulExample(text) {
   if (NOISY_EXAMPLE_PATTERNS.some((pattern) => pattern.test(text))) return false;
   const lower = text.toLowerCase();
   return FRICTION_MARKERS.some((marker) => lower.includes(marker)) || /please|can you|fix|test|verify|review/.test(lower);
+}
+
+function buildEvidenceSnippet(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/base_url|http_headers|config\.toml|token|password|api[_-]?key/i.test(line));
+  const useful =
+    lines.find((line) => FRICTION_MARKERS.some((marker) => line.toLowerCase().includes(marker))) ||
+    lines.find((line) => /please|can you|fix|test|verify|review/i.test(line)) ||
+    lines[0] ||
+    text;
+  return redactSecrets(useful).slice(0, 220);
 }
 
 function serializeStats(stats) {
