@@ -116,14 +116,6 @@ body {
   text-decoration: none;
 }
 
-.chips {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.chips span,
 .badge {
   display: inline-flex;
   align-items: center;
@@ -135,18 +127,6 @@ body {
   color: #2365c8;
   font-size: 0.86rem;
   font-weight: 690;
-}
-
-.chips span:nth-child(2) {
-  color: var(--green);
-  background: #f4fbf7;
-  border-color: #cce8d8;
-}
-
-.chips span:nth-child(3) {
-  color: var(--purple);
-  background: #fbf8ff;
-  border-color: #dfd3fa;
 }
 
 .summary-grid {
