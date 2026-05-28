@@ -207,7 +207,7 @@ body {
 
 .top-grid {
   display: grid;
-  grid-template-columns: 292px minmax(420px, 1fr) 470px;
+  grid-template-columns: minmax(260px, 0.68fr) minmax(360px, 1.45fr) minmax(320px, 1fr);
   gap: 14px;
   margin-top: 16px;
 }
@@ -716,7 +716,7 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-@media (max-width: 1240px) {
+@media (max-width: 1360px) {
   .top-grid,
   .bottom-grid,
   .coach-grid,

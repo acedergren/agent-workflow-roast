@@ -312,21 +312,50 @@
         const strict = Number(state.strictness);
         const toneLabel = state.tone === "sharp" ? "blunt but useful" : state.tone === "gentle" ? "encouraging" : "direct and kind";
         elements.narrative.textContent = `Use a ${toneLabel} voice. Treat the raw counts as evidence, then explain the working style, the likely root causes, and the next behavior change without pretending weak signals are certain.`;
-        elements.glance.innerHTML = [
+        replaceChildren(
+          elements.glance,
+          [
           ["Working", "Preserve visible evidence, verification loops, and concrete project context."],
           ["Hindering", state.friction],
           ["Quick win", state.outcome === "prompts" ? "Rewrite the first prompt with proof and boundaries." : "Add one copy-ready rule for the top friction category."],
           ["Ambitious", "Build a repeatable weekly reflection that tracks whether the rules reduce friction."],
-        ]
-          .map(([title, body]) => `<article class="card"><strong>${title}</strong><p>${body}</p></article>`)
-          .join("");
-        elements.rules.innerHTML = state.friction
+          ].map(([title, body]) => createGlanceCard(title, body)),
+        );
+        replaceChildren(elements.rules, frictionItems().map(createRule));
+        elements.prompt.textContent = buildPrompt(strict);
+      }
+
+      function frictionItems() {
+        return state.friction
           .split(";")
           .map((item) => item.trim())
-          .filter(Boolean)
-          .map((item) => `<div class="rule"><strong>${item}</strong><code>When this pattern appears, pause, name the evidence, and produce a copy-ready instruction that prevents recurrence.</code></div>`)
-          .join("");
-        elements.prompt.textContent = buildPrompt(strict);
+          .filter(Boolean);
+      }
+
+      function replaceChildren(parent, children) {
+        parent.replaceChildren(...children);
+      }
+
+      function createGlanceCard(title, body) {
+        const article = document.createElement("article");
+        article.className = "card";
+        const strong = document.createElement("strong");
+        strong.textContent = title;
+        const paragraph = document.createElement("p");
+        paragraph.textContent = body;
+        article.append(strong, paragraph);
+        return article;
+      }
+
+      function createRule(item) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "rule";
+        const strong = document.createElement("strong");
+        strong.textContent = item;
+        const code = document.createElement("code");
+        code.textContent = "When this pattern appears, pause, name the evidence, and produce a copy-ready instruction that prevents recurrence.";
+        wrapper.append(strong, code);
+        return wrapper;
       }
 
       function buildPrompt(strict) {
