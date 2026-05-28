@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 
 import {
   analyzeRows,
+  applySessionCwd,
   buildDeterministicInsights,
   buildReport,
   cleanupOldTempReports,
@@ -60,6 +61,18 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
   assert.equal(stats.projects[0].name, "codex-insights");
   assert.equal(stats.tools.find((item) => item.name === "exec_command").count, 1);
   assert.ok(stats.friction.some((item) => item.name === "failed"));
+});
+
+test("applySessionCwd carries session cwd into later rows", () => {
+  const rows = applySessionCwd([
+    { type: "session_meta", payload: { cwd: "/Users/acedergr/Documents/codex-insights" } },
+    { type: "response_item", content: "continued work" },
+  ]);
+
+  const stats = analyzeRows(rows, { days: 30 });
+
+  assert.equal(stats.projects[0].name, "codex-insights");
+  assert.equal(stats.projects[0].count, 2);
 });
 
 test("selectMemoryHits returns project-related memory context", () => {

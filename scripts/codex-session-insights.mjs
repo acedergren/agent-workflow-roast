@@ -168,10 +168,13 @@ export function extractText(row) {
 export function extractCwd(row) {
   const candidates = [
     row.cwd,
+    row.payload?.cwd,
     row.session_meta?.payload?.cwd,
     row.turn_context?.cwd,
+    row.turn_context?.payload?.cwd,
     row.payload?.cwd,
     row.context?.cwd,
+    row._sessionCwd,
   ].filter(Boolean);
   return candidates.find((candidate) => typeof candidate === "string") || "";
 }
@@ -511,12 +514,24 @@ export function loadInputs(codexHome, options = {}) {
   ];
   const parsed = jsonlFiles.map((path) => {
     const result = parseJsonl(readJsonlTail(path));
-    return { path, ...result };
+    return { path, rows: applySessionCwd(result.rows), malformed: result.malformed };
   });
   const rows = parsed.flatMap((item) => item.rows);
   const malformedRows = parsed.reduce((sum, item) => sum + item.malformed.length, 0);
   const memoryText = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
   return { rows, malformedRows, memoryText, jsonlFiles };
+}
+
+export function applySessionCwd(rows) {
+  let sessionCwd = "";
+  return rows.map((row) => {
+    const cwd = extractCwd(row);
+    if (cwd) {
+      sessionCwd = cwd;
+      return row;
+    }
+    return sessionCwd ? { ...row, _sessionCwd: sessionCwd } : row;
+  });
 }
 
 export function buildReport(inputs, options) {
