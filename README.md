@@ -16,6 +16,19 @@ Reports are local-first and temporary by default. Durable files are written only
 
 ## Quick Start
 
+Install the plugin from the public repo marketplace:
+
+```bash
+codex plugin marketplace add acedergren/codex-insights --ref main
+codex plugin add codex-session-insights@codex-insights
+```
+
+Then start or restart Codex and run:
+
+```text
+/insight --days 7
+```
+
 Run the analyzer directly from the repository:
 
 ```bash
@@ -83,6 +96,7 @@ By default, the analyzer attempts qualitative synthesis with `codex exec` using 
 ## Plugin Layout
 
 ```text
+.agents/plugins/marketplace.json   Repo marketplace catalog
 .codex-plugin/plugin.json          Plugin manifest
 commands/insight.md                /insight command
 skills/insight/SKILL.md            @insight skill

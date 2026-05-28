@@ -1,0 +1,20 @@
+{
+  "name": "codex-insights",
+  "interface": {
+    "displayName": "Codex Insights"
+  },
+  "plugins": [
+    {
+      "name": "codex-session-insights",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
