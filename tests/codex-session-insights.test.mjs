@@ -58,15 +58,40 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
       recipient: "apply_patch",
       text: "Permission retry fixed the error",
     },
+    {
+      timestamp: new Date().toISOString(),
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          total_token_usage: {
+            input_tokens: 99000,
+            cached_input_tokens: 80000,
+            output_tokens: 900,
+            reasoning_output_tokens: 100,
+            total_tokens: 99900,
+          },
+          last_token_usage: {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 300,
+            reasoning_output_tokens: 20,
+            total_tokens: 2300,
+          },
+        },
+      },
+    },
   ];
 
   const stats = analyzeRows(rows, { days: 30 });
 
-  assert.equal(stats.totalRows, 2);
+  assert.equal(stats.totalRows, 3);
   assert.equal(stats.projects[0].name, "codex-insights");
   assert.equal(stats.tools.find((item) => item.name === "exec_command").count, 1);
   assert.ok(stats.friction.some((item) => item.name === "failed"));
-  assert.equal(stats.tokenSpend.actual.total >= 1400, true);
+  assert.equal(stats.tokenSpend.actual.total >= 3700, true);
+  assert.equal(stats.tokenSpend.actual.total < 99900, true);
+  assert.equal(stats.tokenSpend.actual.cachedInput >= 500, true);
   assert.equal(stats.tokenSpend.daily.length >= 1, true);
 });
 
@@ -81,6 +106,20 @@ test("analyzeRows stores short redacted evidence snippets", () => {
 
   assert.equal(stats.examples[0], "Tests failed because auth config was stale.");
   assert.doesNotMatch(stats.examples.join("\n"), /internal\.example|base_url/);
+});
+
+test("analyzeRows parses status-style token usage text", () => {
+  const stats = analyzeRows([
+    {
+      timestamp: new Date().toISOString(),
+      cwd: "/tmp/codex-insights",
+      content: "Token usage: 7.49K total (7.38K input + 105 output)",
+    },
+  ]);
+
+  assert.equal(stats.tokenSpend.measured, 7490);
+  assert.equal(stats.tokenSpend.actual.input, 7380);
+  assert.equal(stats.tokenSpend.actual.output, 105);
 });
 
 test("applySessionCwd carries session cwd into later rows", () => {

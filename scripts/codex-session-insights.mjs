@@ -24,6 +24,7 @@ const MAX_JSONL_BYTES = 2 * 1024 * 1024;
 const MAX_SESSION_FILES = 200;
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION = 5;
+const DEFAULT_ENTERPRISE_CACHED_INPUT_COST_PER_MILLION = 0.5;
 const DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION = 15;
 
 const SECRET_PATTERNS = [
@@ -215,41 +216,99 @@ export function extractToolNames(row) {
 }
 
 function extractTokenUsage(row, text = "") {
+  const codexTokenUsage = row?.payload?.type === "token_count" ? row.payload.info?.last_token_usage : null;
+  if (codexTokenUsage) return normalizeTokenUsage(codexTokenUsage, true);
   const usage = findUsageObject(row);
+  if (usage) return normalizeTokenUsage(usage, true);
+  const textUsage = parseTokenUsageText(text);
+  if (textUsage) return normalizeTokenUsage(textUsage, true);
+  const estimated = Math.max(1, Math.round(String(text || "").length / ESTIMATED_CHARS_PER_TOKEN));
+  return {
+    input: Math.round(estimated * 0.7),
+    cachedInput: 0,
+    output: Math.max(0, estimated - Math.round(estimated * 0.7)),
+    reasoningOutput: 0,
+    total: estimated,
+    measured: false,
+  };
+}
+
+function normalizeTokenUsage(usage, measured) {
   const input = numberFromKeys(usage, [
     "input_tokens",
     "prompt_tokens",
     "cache_creation_input_tokens",
     "cache_read_input_tokens",
   ]);
-  const output = numberFromKeys(usage, ["output_tokens", "completion_tokens"]);
+  const cachedInput = numberFromKeys(usage, ["cached_input_tokens", "cache_read_input_tokens", "cachedInputTokens"]);
+  const output = numberFromKeys(usage, ["output_tokens", "completion_tokens", "reasoning_output_tokens"]);
+  const reasoningOutput = numberFromKeys(usage, ["reasoning_output_tokens", "reasoningOutputTokens"]);
   const totalFromUsage = Number(usage?.total_tokens || usage?.tokens_total || usage?.totalTokens || 0);
-  if (input > 0 || output > 0 || totalFromUsage > 0) {
-    const known = input + output;
-    const total = Math.max(totalFromUsage, known);
-    const inferredInput = input || Math.round(total * 0.7);
-    const inferredOutput = output || Math.max(0, total - inferredInput);
-    return { input: inferredInput, output: inferredOutput, total, measured: true };
-  }
-  const estimated = Math.max(1, Math.round(String(text || "").length / ESTIMATED_CHARS_PER_TOKEN));
+  const known = input + output;
+  const total = Math.max(totalFromUsage, known);
+  const inferredInput = input || Math.round(total * 0.7);
+  const inferredOutput = output || Math.max(0, total - inferredInput);
   return {
-    input: Math.round(estimated * 0.7),
-    output: Math.max(0, estimated - Math.round(estimated * 0.7)),
-    total: estimated,
-    measured: false,
+    input: inferredInput,
+    cachedInput: Math.min(cachedInput, inferredInput),
+    output: inferredOutput,
+    reasoningOutput,
+    total,
+    measured,
   };
+}
+
+function parseTokenUsageText(text) {
+  const source = String(text || "");
+  const keyValue = source.match(
+    /Token usage:\s*total=([\d,.]+[KMB]?)\s+input=([\d,.]+[KMB]?)\s+output=([\d,.]+[KMB]?)(?:\s+cached(?:_input)?=([\d,.]+[KMB]?))?/i,
+  );
+  if (keyValue) {
+    return {
+      total_tokens: parseTokenCount(keyValue[1]),
+      input_tokens: parseTokenCount(keyValue[2]),
+      output_tokens: parseTokenCount(keyValue[3]),
+      cached_input_tokens: parseTokenCount(keyValue[4]),
+    };
+  }
+  const prose = source.match(
+    /Token usage:\s*([\d,.]+[KMB]?)\s+total\s*\(([\d,.]+[KMB]?)\s+input\s*\+\s*([\d,.]+[KMB]?)\s+output(?:\s*\+\s*([\d,.]+[KMB]?)\s+cached)?/i,
+  );
+  if (prose) {
+    return {
+      total_tokens: parseTokenCount(prose[1]),
+      input_tokens: parseTokenCount(prose[2]),
+      output_tokens: parseTokenCount(prose[3]),
+      cached_input_tokens: parseTokenCount(prose[4]),
+    };
+  }
+  return null;
+}
+
+function parseTokenCount(value) {
+  if (!value) return 0;
+  const text = String(value).replace(/,/g, "").trim();
+  const match = text.match(/^([\d.]+)\s*([KMB])?$/i);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return 0;
+  const suffix = (match[2] || "").toUpperCase();
+  if (suffix === "K") return Math.round(amount * 1_000);
+  if (suffix === "M") return Math.round(amount * 1_000_000);
+  if (suffix === "B") return Math.round(amount * 1_000_000_000);
+  return Math.round(amount);
 }
 
 function findUsageObject(value, depth = 0) {
   if (depth > 5 || value == null || typeof value !== "object") return null;
   if (
-    ["input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens", "tokens_total", "totalTokens"].some(
+    ["input_tokens", "cached_input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens", "tokens_total", "totalTokens"].some(
       (key) => Number.isFinite(Number(value[key])),
     )
   ) {
     return value;
   }
-  for (const key of ["usage", "token_usage", "tokenUsage", "response", "payload", "item", "items", "content"]) {
+  for (const key of ["last_token_usage", "usage", "token_usage", "tokenUsage", "response", "payload", "info", "item", "items", "content"]) {
     const child = value[key];
     if (Array.isArray(child)) {
       for (const item of child.slice(0, 20)) {
@@ -300,7 +359,9 @@ export function analyzeRows(rows, options = {}) {
     measuredTokens: 0,
     estimatedTokens: 0,
     inputTokens: 0,
+    cachedInputTokens: 0,
     outputTokens: 0,
+    reasoningOutputTokens: 0,
   };
 
   for (const row of rows) {
@@ -313,11 +374,24 @@ export function analyzeRows(rows, options = {}) {
     stats.measuredTokens += tokenUsage.measured ? tokenUsage.total : 0;
     stats.estimatedTokens += tokenUsage.measured ? 0 : tokenUsage.total;
     stats.inputTokens += tokenUsage.input;
+    stats.cachedInputTokens += tokenUsage.cachedInput;
     stats.outputTokens += tokenUsage.output;
+    stats.reasoningOutputTokens += tokenUsage.reasoningOutput;
     const day = dayKey(timestamp || new Date());
-    const daily = stats.dailyTokens.get(day) || { day, input: 0, output: 0, total: 0, measured: 0, estimated: 0 };
+    const daily = stats.dailyTokens.get(day) || {
+      day,
+      input: 0,
+      cachedInput: 0,
+      output: 0,
+      reasoningOutput: 0,
+      total: 0,
+      measured: 0,
+      estimated: 0,
+    };
     daily.input += tokenUsage.input;
+    daily.cachedInput += tokenUsage.cachedInput;
     daily.output += tokenUsage.output;
+    daily.reasoningOutput += tokenUsage.reasoningOutput;
     daily.total += tokenUsage.total;
     if (tokenUsage.measured) daily.measured += tokenUsage.total;
     else daily.estimated += tokenUsage.total;
@@ -391,7 +465,9 @@ function serializeStats(stats) {
 function buildTokenSpend(stats) {
   const actual = {
     input: Math.round(stats.inputTokens || 0),
+    cachedInput: Math.round(stats.cachedInputTokens || 0),
     output: Math.round(stats.outputTokens || 0),
+    reasoningOutput: Math.round(stats.reasoningOutputTokens || 0),
     total: Math.round((stats.inputTokens || 0) + (stats.outputTokens || 0)),
   };
   const measured = Math.round(stats.measuredTokens || 0);
@@ -403,7 +479,13 @@ function buildTokenSpend(stats) {
   const dailyRows = fillDailyTokenRows(stats.dailyTokens, stats.lookbackDays || DEFAULT_DAYS);
   const daily = dailyRows
     .map((item) => {
-      const itemActual = { input: item.input, output: item.output, total: item.total };
+      const itemActual = {
+        input: item.input,
+        cachedInput: item.cachedInput,
+        output: item.output,
+        reasoningOutput: item.reasoningOutput,
+        total: item.total,
+      };
       const itemProjected = scaleTokenTotals(itemActual, 1 - improvementRate);
       return {
         day: item.day,
@@ -430,12 +512,13 @@ function buildTokenSpend(stats) {
     },
     rates: {
       inputPerMillion: DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION,
+      cachedInputPerMillion: DEFAULT_ENTERPRISE_CACHED_INPUT_COST_PER_MILLION,
       outputPerMillion: DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION,
       currency: "USD",
     },
     caveat:
       measured > 0
-        ? "Uses measured token rows where available; remaining rows are estimated from redacted text volume."
+        ? "Uses Codex token-count rows and API usage fields where available; remaining rows are estimated from redacted text volume."
         : "No explicit token usage rows were found, so token spend is estimated from redacted text volume.",
   };
 }
@@ -449,7 +532,9 @@ function fillDailyTokenRows(dailyTokens, days) {
     const date = new Date(today);
     date.setUTCDate(today.getUTCDate() - offset);
     const day = dayKey(date);
-    rows.push(dailyTokens.get(day) || { day, input: 0, output: 0, total: 0, measured: 0, estimated: 0 });
+    rows.push(
+      dailyTokens.get(day) || { day, input: 0, cachedInput: 0, output: 0, reasoningOutput: 0, total: 0, measured: 0, estimated: 0 },
+    );
   }
   return rows;
 }
@@ -465,18 +550,24 @@ function estimateTokenImprovementRate(stats) {
 function scaleTokenTotals(tokens, factor) {
   return {
     input: Math.round((tokens.input || 0) * factor),
+    cachedInput: Math.round((tokens.cachedInput || 0) * factor),
     output: Math.round((tokens.output || 0) * factor),
+    reasoningOutput: Math.round((tokens.reasoningOutput || 0) * factor),
     total: Math.round((tokens.total || 0) * factor),
   };
 }
 
 function estimateEnterpriseCost(tokens) {
-  const input = ((tokens.input || 0) / 1_000_000) * DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION;
+  const cachedInputTokens = Math.min(tokens.cachedInput || 0, tokens.input || 0);
+  const uncachedInputTokens = Math.max(0, (tokens.input || 0) - cachedInputTokens);
+  const input = (uncachedInputTokens / 1_000_000) * DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION;
+  const cachedInput = (cachedInputTokens / 1_000_000) * DEFAULT_ENTERPRISE_CACHED_INPUT_COST_PER_MILLION;
   const output = ((tokens.output || 0) / 1_000_000) * DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION;
   return {
     input,
+    cachedInput,
     output,
-    total: input + output,
+    total: input + cachedInput + output,
   };
 }
 
@@ -1727,7 +1818,7 @@ function renderEffectivenessDashboard(metrics, stats = {}) {
         <div><span>API cost delta</span><strong>${escapeHtml(formatCurrency(tokenSpend.savings.cost))}</strong><small>saved</small></div>
       </div>
       ${renderTokenSpendChart(tokenSpend)}
-      <p>${escapeHtml(tokenSpend.caveat)} Scenario assumes ${escapeHtml(Math.round(tokenSpend.improvementRate * 100))}% token reduction from applying the recommended artifacts. Cost uses ${escapeHtml(formatCurrency(tokenSpend.rates.inputPerMillion))}/1M input and ${escapeHtml(formatCurrency(tokenSpend.rates.outputPerMillion))}/1M output tokens.</p>
+      <p>${escapeHtml(tokenSpend.caveat)} Scenario assumes ${escapeHtml(Math.round(tokenSpend.improvementRate * 100))}% token reduction from applying the recommended artifacts. Cost uses ${escapeHtml(formatCurrency(tokenSpend.rates.inputPerMillion))}/1M input, ${escapeHtml(formatCurrency(tokenSpend.rates.cachedInputPerMillion))}/1M cached input, and ${escapeHtml(formatCurrency(tokenSpend.rates.outputPerMillion))}/1M output tokens.</p>
     </div>
     <div class="effectiveness-metrics">
       ${items
@@ -1803,7 +1894,7 @@ function renderTokenSpendChart(tokenSpend) {
 function buildEmptyTokenSpend() {
   return {
     actual: { input: 0, output: 0, total: 0 },
-    projected: { input: 0, output: 0, total: 0 },
+    projected: { input: 0, cachedInput: 0, output: 0, total: 0 },
     daily: [],
     improvementRate: 0,
     actualCost: { total: 0 },
@@ -1811,6 +1902,7 @@ function buildEmptyTokenSpend() {
     savings: { tokens: 0, cost: 0 },
     rates: {
       inputPerMillion: DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION,
+      cachedInputPerMillion: DEFAULT_ENTERPRISE_CACHED_INPUT_COST_PER_MILLION,
       outputPerMillion: DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION,
     },
     caveat: "No token spend signal found.",
