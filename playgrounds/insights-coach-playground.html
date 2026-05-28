@@ -365,7 +365,8 @@
           `Optimize for ${state.outcome}.`,
           `Evidence strictness is ${strict}/5: ${strict >= 4 ? "label weak evidence and avoid overclaiming" : "allow more interpretive coaching"}.`,
           `Top observed friction: ${state.friction}`,
-          "Return JSON with summary, atAGlance, narrative, frictionAnalysis, promptQuality, improvements, instructions, and prompts.",
+          "Return JSON with summary, atAGlance, narrative, frictionAnalysis, promptQuality, improvements, customInstructions, instructions, and prompts.",
+          "customInstructions must be plain text the user can paste into Codex Settings > Custom instructions.",
         ];
         return parts.join("\n");
       }

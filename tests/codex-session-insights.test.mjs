@@ -120,8 +120,10 @@ test("renderers include required report sections", () => {
   assert.match(html, /Workflow Pattern Map/);
   assert.match(html, /Top Improvements/);
   assert.match(html, /Coach&#39;s Read/);
+  assert.match(html, /Custom Instructions/);
   assert.match(markdown, /Ready-to-use Prompt Patterns/);
   assert.match(markdown, /Prompt Quality/);
+  assert.match(markdown, /Codex Settings &gt; Custom instructions|Codex Settings > Custom instructions/);
 });
 
 test("buildCoachingPrompt asks for actionable coaching schema", () => {
@@ -131,6 +133,8 @@ test("buildCoachingPrompt asks for actionable coaching schema", () => {
   assert.match(prompt, /engineering coach/);
   assert.match(prompt, /frictionAnalysis/);
   assert.match(prompt, /promptQuality/);
+  assert.match(prompt, /customInstructions/);
+  assert.match(prompt, /Codex Settings > Custom instructions/);
 });
 
 test("parseCodexJsonOutput extracts JSON from event streams", () => {

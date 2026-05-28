@@ -12,7 +12,7 @@ The report is local-first and temporary by default. Durable files are written on
 - Optional memory context from `~/.codex/memories/MEMORY.md`.
 - Bounded JSONL reads so large Codex installs do not exhaust memory.
 - Secret, URL, email, and noisy-config redaction before rendering or synthesis.
-- LLM coaching pass that turns raw stats into a working-style narrative, friction coaching, prompt-quality feedback, generated rules, and ready-to-use prompts.
+- LLM coaching pass that turns raw stats into a working-style narrative, friction coaching, prompt-quality feedback, a copy-ready Codex custom-instructions artifact, generated rules, and ready-to-use prompts.
 - `--no-ai` mode for deterministic local-only coaching.
 - Single-file playground for tuning the coaching prompt and report shape.
 
@@ -46,6 +46,7 @@ The command prints the generated path. Default HTML reports are written under th
 - **Top Improvements**: practical behavior changes based on recent patterns.
 - **Friction Signals**: repeated markers such as auth drift, missing proof, failed checks, retries, or timeouts.
 - **Prompt Quality**: a coaching score, diagnosis, and better prompt pattern.
+- **Custom Instructions**: paste-ready text for Codex Settings > Custom instructions.
 - **Suggested Instruction Changes**: copy-ready rules for AGENTS.md or local instructions.
 - **Ready-to-use Prompt Patterns**: prompts you can reuse immediately.
 

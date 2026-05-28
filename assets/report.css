@@ -544,6 +544,27 @@ h2 {
   margin-top: 14px;
 }
 
+.custom-instructions-panel {
+  margin-top: 14px;
+}
+
+.custom-instructions-copy {
+  padding: 0 18px 18px;
+}
+
+.custom-instructions-copy textarea {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 14px;
+  color: #1e293b;
+  background: #f8fbff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 0.84rem/1.52 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 .coach-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);

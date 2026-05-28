@@ -312,7 +312,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
   const mainProject = stats.projects[0]?.name || "recent Codex work";
   const topTool = stats.tools[0]?.name || "local shell and file tools";
   const topFriction = stats.friction[0]?.name || "context drift";
-  return {
+  const insights = {
     summary: `Recent activity is concentrated around ${mainProject}, with ${topTool} as the strongest tool signal and ${topFriction} as the leading friction marker.`,
     atAGlance: {
       working: `You are keeping a lot of work moving through ${mainProject}.`,
@@ -360,6 +360,8 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
       `/insight --export markdown --output codex-insights-report.md`,
     ],
   };
+  insights.customInstructions = buildCustomInstructionsArtifact(stats, insights, memoryHits);
+  return insights;
 }
 
 export function tryCodexSynthesis(stats, memoryHits) {
@@ -388,7 +390,8 @@ export function buildCoachingPrompt(stats, memoryHits) {
   return [
     "You are an exacting but kind engineering coach reviewing recent Codex session patterns.",
     "The raw counts have already been computed. Your job is to turn them into a human-understandable retrospective with concrete coaching.",
-    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, and ready-to-use prompts.",
+    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a Codex custom-instructions artifact, and ready-to-use prompts.",
+    "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
     "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
     "Return only one JSON object. No markdown fences.",
     "Required JSON shape:",
@@ -417,6 +420,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
           betterPrompt: "copy-ready improved prompt pattern",
         },
         improvements: [{ title: "imperative title", body: "why it matters and what to do" }],
+        customInstructions: "copy-ready text for Codex Settings > Custom instructions",
         instructions: ["copy-ready instruction changes"],
         prompts: ["copy-ready prompts"],
       },
@@ -528,6 +532,15 @@ export function renderHtml(report) {
     "panel coaching-panel",
   );
 
+  const customInstructions = panel(
+    "Custom Instructions",
+    '<p class="subtle">Copy this into Codex Settings &gt; Custom instructions</p>',
+    `<div class="custom-instructions-copy"><textarea readonly spellcheck="false">${escapeHtml(
+      report.insights.customInstructions || "",
+    )}</textarea></div>`,
+    "panel custom-instructions-panel",
+  );
+
   const prompts = panel(
     "Ready-to-use Prompt Patterns",
     "",
@@ -569,6 +582,7 @@ export function renderHtml(report) {
     .replace("{{projectMap}}", projectMap)
     .replace("{{improvements}}", improvements)
     .replace("{{coaching}}", coaching)
+    .replace("{{customInstructions}}", customInstructions)
     .replace("{{prompts}}", prompts)
     .replace("{{friction}}", friction)
     .replace("{{instructions}}", instructions)
@@ -602,6 +616,8 @@ export function renderMarkdown(report) {
     lines.push(`- Diagnosis: ${report.insights.promptQuality.diagnosis}`);
     lines.push(`- Better prompt: ${report.insights.promptQuality.betterPrompt}`);
   }
+  lines.push("", "## Custom Instructions", "", "Paste this into Codex Settings > Custom instructions.", "");
+  lines.push("```text", report.insights.customInstructions || "", "```");
   lines.push("", "## Suggested Instruction Changes");
   for (const item of report.insights.instructions) lines.push(`- ${item}`);
   lines.push("", "## Ready-to-use Prompt Patterns");
@@ -705,7 +721,7 @@ export function buildReport(inputs, options) {
   const stats = analyzeRows(inputs.rows, { days: options.days, malformedRows: inputs.malformedRows });
   const memoryHits = options.includeMemory ? selectMemoryHits(inputs.memoryText, stats.projects) : [];
   const aiInsights = options.useAi === false ? null : tryCodexSynthesis(stats, memoryHits);
-  const insights = normalizeInsights(aiInsights) || buildDeterministicInsights(stats, memoryHits);
+  const insights = normalizeInsights(aiInsights, stats, memoryHits) || buildDeterministicInsights(stats, memoryHits);
   return {
     title: `Codex Session Insights (${options.days} days)`,
     generatedAt: new Date().toISOString(),
@@ -716,12 +732,12 @@ export function buildReport(inputs, options) {
   };
 }
 
-function normalizeInsights(value) {
+function normalizeInsights(value, stats = {}, memoryHits = []) {
   if (!value || typeof value !== "object") return null;
   if (!Array.isArray(value.improvements) || !Array.isArray(value.instructions) || !Array.isArray(value.prompts)) {
     return null;
   }
-  return {
+  const normalized = {
     summary: String(value.summary || "Recent Codex activity was analyzed."),
     atAGlance: normalizeAtAGlance(value.atAGlance),
     narrative: String(value.narrative || value.summary || "Recent Codex activity was analyzed."),
@@ -742,6 +758,40 @@ function normalizeInsights(value) {
     instructions: value.instructions.slice(0, 5).map(String),
     prompts: value.prompts.slice(0, 5).map(String),
   };
+  normalized.customInstructions = normalizeCopyBlock(
+    value.customInstructions || buildCustomInstructionsArtifact(stats, normalized, memoryHits),
+  );
+  return normalized;
+}
+
+function buildCustomInstructionsArtifact(stats = {}, insights = {}, memoryHits = []) {
+  const mainProject = stats.projects?.[0]?.name || "the current repo or task";
+  const topFriction = stats.friction?.[0]?.name;
+  const topRule =
+    insights.frictionAnalysis?.[0]?.rule ||
+    insights.instructions?.[0] ||
+    "State the expected verification before marking work complete.";
+  const lines = [
+    "When helping me in Codex:",
+    `- Start by naming the active context, usually ${mainProject}, and the proof that will show the task is done.`,
+    "- Prefer the smallest coherent change that satisfies the request, then verify it with an exact command, file, URL, screenshot, or test result.",
+    "- Treat repeated friction as a signal to pause, state the hypothesis, and run a focused check before broad changes.",
+    `- Use this recurring rule when it applies: ${topRule}`,
+    "- When a workaround proves useful, suggest promoting it into AGENTS.md, a README note, a script, or a reusable command.",
+  ];
+  if (topFriction) {
+    lines.splice(4, 0, `- Watch especially for ${topFriction}; call it out early and turn it into a concrete next action.`);
+  }
+  if (memoryHits.length > 0) {
+    lines.push("- Treat memory as a starting signal, and refresh drift-prone facts from the live repo before relying on them.");
+  }
+  return lines.join("\n");
+}
+
+function normalizeCopyBlock(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.length > 2400 ? text.slice(0, 2400).trim() : text;
 }
 
 function normalizeAtAGlance(value) {
