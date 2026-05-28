@@ -1,16 +1,20 @@
 # Codex Insights
 
-Codex Insights is a local Codex plugin that turns recent Codex session history and optional memory context into an ephemeral operational dashboard. It is meant for quick workflow reflection: what projects are taking attention, where loops or friction keep appearing, and which practical instruction changes might help next.
+Codex Insights is a local Codex plugin that turns recent Codex sessions into an ephemeral coaching report. It helps answer: where is my agent work going, what keeps slowing it down, and what local rules or prompts would make the next run better?
 
-## What It Does
+The report is local-first and temporary by default. Durable files are written only when you explicitly export them.
 
-- Adds a `/insight` slash command for on-demand reports.
-- Adds an `@insight` skill trigger for conversational use.
-- Reads `~/.codex/history.jsonl`, `~/.codex/sessions/**/*.jsonl`, and, by default, `~/.codex/memories/MEMORY.md`.
-- Redacts obvious secrets before synthesis and rendering.
-- Uses an LLM coaching pass to turn raw stats into a working-style narrative, friction coaching, prompt-quality feedback, generated rules, and ready-to-use prompts.
-- Writes reports to a short-lived temp directory by default.
-- Persists output only when `--export markdown|html|json` is supplied.
+## Highlights
+
+- `/insight` slash command for on-demand reports.
+- `@insight` skill trigger for conversational use.
+- Session ingestion from `~/.codex/history.jsonl` and `~/.codex/sessions/**/*.jsonl`.
+- Optional memory context from `~/.codex/memories/MEMORY.md`.
+- Bounded JSONL reads so large Codex installs do not exhaust memory.
+- Secret, URL, email, and noisy-config redaction before rendering or synthesis.
+- LLM coaching pass that turns raw stats into a working-style narrative, friction coaching, prompt-quality feedback, generated rules, and ready-to-use prompts.
+- `--no-ai` mode for deterministic local-only coaching.
+- Single-file playground for tuning the coaching prompt and report shape.
 
 ## Quick Start
 
@@ -20,10 +24,10 @@ Run the analyzer directly from the repository:
 npm run insight -- --no-open
 ```
 
-Generate a 30-day report:
+Generate a 30-day deterministic report without LLM synthesis:
 
 ```bash
-npm run insight -- --days 30 --no-open
+npm run insight -- --days 30 --no-ai --no-open
 ```
 
 Export a durable Markdown report:
@@ -32,28 +36,58 @@ Export a durable Markdown report:
 npm run insight -- --export markdown --output codex-insights-report.md
 ```
 
-The command prints the generated report path. On macOS, default ephemeral HTML reports are opened automatically unless `--no-open` is passed.
+The command prints the generated path. Default HTML reports are written under the OS temp directory and opened automatically on macOS unless `--no-open` is passed.
 
-## Plugin Layout
+## Report Sections
 
-- `.codex-plugin/plugin.json` declares the local plugin metadata.
-- `commands/insight.md` defines the `/insight` slash command.
-- `skills/insight/SKILL.md` defines the `@insight` skill trigger.
-- `scripts/codex-session-insights.mjs` ingests, analyzes, redacts, synthesizes, and writes reports.
-- `templates/report.html` and `assets/report.css` render the compact dashboard UI.
-- `playgrounds/insights-coach-playground.html` is a single-file playground for tuning the coaching prompt and expected report shape.
-- `tests/codex-session-insights.test.mjs` covers parsing, grouping, redaction, rendering, export, and temp cleanup.
+- **At a glance**: what is working, what is hindering, the quick win, and the higher-leverage workflow.
+- **Workflow Pattern Map**: top project areas and session distribution.
+- **Coach's Read**: human-readable synthesis after raw signals are cooked down.
+- **Top Improvements**: practical behavior changes based on recent patterns.
+- **Friction Signals**: repeated markers such as auth drift, missing proof, failed checks, retries, or timeouts.
+- **Prompt Quality**: a coaching score, diagnosis, and better prompt pattern.
+- **Suggested Instruction Changes**: copy-ready rules for AGENTS.md or local instructions.
+- **Ready-to-use Prompt Patterns**: prompts you can reuse immediately.
 
 ## Options
 
 ```text
 --days <n>                  Lookback window in days, default 14
 --no-memory                 Exclude ~/.codex/memories/MEMORY.md
+--no-ai                     Skip codex exec synthesis and use deterministic coaching
 --export markdown|html|json Persist a report instead of temp-only HTML
 --output <path>             Output path for --export
 --no-open                   Do not open generated HTML
---no-ai                     Skip codex exec synthesis and use deterministic coaching
 --codex-home <path>         Override ~/.codex input root
+```
+
+## Privacy Model
+
+Codex Insights reads local Codex history, session, and memory files. Before synthesis or rendering, it redacts obvious secrets, bearer tokens, GitHub tokens, API-key assignments, passwords, URLs, emails, private-key blocks, and noisy config-looking evidence snippets.
+
+By default, the analyzer attempts qualitative synthesis with `codex exec` using a bounded, redacted payload. Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when you want deterministic local-only coaching without sending that payload through a model call. If synthesis fails or returns unusable JSON, the deterministic report still renders.
+
+## Playground
+
+Open the coaching playground to tune the report shape and prompt strategy:
+
+```bash
+open playgrounds/insights-coach-playground.html
+```
+
+It is a self-contained HTML file with controls for tone, outcome, evidence strictness, example friction, a live preview, and a copyable analyzer prompt.
+
+## Plugin Layout
+
+```text
+.codex-plugin/plugin.json          Plugin manifest
+commands/insight.md                /insight command
+skills/insight/SKILL.md            @insight skill
+scripts/codex-session-insights.mjs Analyzer, redaction, synthesis, rendering
+templates/report.html              HTML report template
+assets/report.css                  Report styling
+playgrounds/insights-coach-playground.html
+tests/codex-session-insights.test.mjs
 ```
 
 ## Validation
@@ -70,12 +104,18 @@ Validate the plugin manifest:
 npm run validate:plugin
 ```
 
-## Privacy Model
+Run a safe real-data smoke test:
 
-Codex Insights is local-first. It reads local Codex session and memory files, redacts obvious secrets, and creates ephemeral reports under the OS temp directory unless export is explicit. Qualitative synthesis uses `codex exec` when available; if that call fails or returns unusable JSON, the deterministic report still renders.
+```bash
+npm run insight -- --days 7 --no-ai --no-open --export html --output /private/tmp/codex-insights.html
+```
 
-Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when you want session-only deterministic coaching without sending the bounded, redacted synthesis payload through `codex exec`.
+## Requirements
+
+- Node.js 20 or newer.
+- Codex CLI for the optional LLM synthesis pass.
+- Local Codex history/session files for meaningful reports.
 
 ## Status
 
-This is an initial implementation of the plan in `/Users/acedergr/Downloads/PLAN.md`. The report UI follows the provided mockup: a Codex-style insights workspace with at-a-glance metrics, a workflow pattern map, improvement cards, friction signals, suggested instruction changes, and reusable prompt patterns.
+This is an initial public implementation of a local Codex insights plugin. The report UI follows the provided mockup: a Codex-style insights workspace with metrics, workflow mapping, coaching, friction signals, prompt quality, suggested instructions, and reusable prompts.
