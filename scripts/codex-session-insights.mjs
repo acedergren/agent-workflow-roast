@@ -379,6 +379,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
   insights.customInstructions = buildCustomInstructionsArtifact(stats, insights, memoryHits);
   insights.workflowPrompts = buildWorkflowPrompts(stats, insights);
   insights.actionPrompts = buildActionPrompts(stats, insights);
+  insights.skillAgentSuggestions = buildSkillAgentSuggestions(stats, insights);
   return insights;
 }
 
@@ -413,6 +414,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
     "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
     "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell Codex to inspect the project first and make durable, repo-grounded changes.",
     "The actionPrompts field must contain exactly five copy-ready prompts that turn the five most effective suggestions into concrete artifacts: scripts, AGENTS.md updates, project skills, specialized agents, custom instructions for Codex Settings > Personalization, or checklists. Each prompt should be runnable as-is in a project or usable as paste-ready personalization text when that fits better.",
+    "The skillAgentSuggestions field must turn Coach's Read, the ambitious workflow, hindering patterns, build/action failures, and auth/secret verification into concrete recommended skills or agents with copy-ready creation prompts.",
     "Include effectivenessMetrics for a dashboard. Use measured fields when present; otherwise label proxy metrics honestly. Cover prompt quality, output effectiveness, token effectiveness, planning clarity, and goal/acceptance clarity.",
     "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
     "Return only one JSON object. No markdown fences.",
@@ -466,6 +468,16 @@ export function buildCoachingPrompt(stats, memoryHits) {
             artifact: "script | AGENTS.md rule | skill | specialist agent | custom instructions | checklist",
             target: "project or repo name",
             prompt: "copy-ready prompt to run in that project",
+          },
+        ],
+        skillAgentSuggestions: [
+          {
+            title: "Portal release and auth skill",
+            kind: "project skill | specialist agent",
+            lane: "recurring project lane or friction lane",
+            target: "project or repo name",
+            why: "what repeated loop this prevents",
+            prompt: "copy-ready prompt to create the skill or agent",
           },
         ],
         prompts: ["copy-ready prompts"],
@@ -612,6 +624,23 @@ export function renderHtml(report) {
     "panel action-prompts-panel",
   );
 
+  const skillAgentSuggestions = panel(
+    "Recommended Skills & Agents",
+    '<p class="subtle">Concrete project lanes and friction lanes to turn into reusable Codex skills or specialist agents</p>',
+    `<div class="mini-list skill-agent-list">${listOrEmpty(
+      report.insights.skillAgentSuggestions || buildSkillAgentSuggestions(report.stats, report.insights),
+      (item) => `<div class="mini-item prompt-card skill-agent-card">
+        <div class="prompt-meta"><strong>${escapeHtml(item.title || "Recommended skill or agent")}</strong><span>${escapeHtml(
+          item.kind || "skill",
+        )}</span></div>
+        <p><strong>${escapeHtml(item.lane || "Lane")}</strong> · ${escapeHtml(item.target || "project")}</p>
+        <p>${escapeHtml(item.why || "Reduce repeated discovery work.")}</p>
+        <code>${escapeHtml(item.prompt || item)}</code>
+      </div>`,
+    )}</div>`,
+    "panel skill-agent-panel",
+  );
+
   const friction = panel(
     "Friction Signals",
     '<p class="subtle">Issues slowing you down, detected from recent sessions</p>',
@@ -646,6 +675,7 @@ export function renderHtml(report) {
     .replace("{{coaching}}", coaching)
     .replace("{{customInstructions}}", customInstructions)
     .replace("{{actionPrompts}}", actionPrompts)
+    .replace("{{skillAgentSuggestions}}", skillAgentSuggestions)
     .replace("{{prompts}}", prompts)
     .replace("{{friction}}", friction)
     .replace("{{instructions}}", instructions)
@@ -697,6 +727,15 @@ export function renderMarkdown(report) {
   lines.push("Run these to turn the strongest suggestions into concrete project artifacts.");
   for (const item of report.insights.actionPrompts || buildActionPrompts(report.stats, report.insights)) {
     lines.push("", `### ${item.title || "Action prompt"}`, `Artifact: ${item.artifact || "artifact"}`, `Target: ${item.target || "project"}`, "", "```text", item.prompt || item, "```");
+  }
+  lines.push("", "## Recommended Skills & Agents");
+  for (const item of report.insights.skillAgentSuggestions || buildSkillAgentSuggestions(report.stats, report.insights)) {
+    lines.push("", `### ${item.title || "Recommended skill or agent"}`);
+    lines.push(`Kind: ${item.kind || "project skill"}`);
+    lines.push(`Lane: ${item.lane || "recurring workflow"}`);
+    lines.push(`Target: ${item.target || "project"}`);
+    lines.push(`Why: ${item.why || "Reduce repeated discovery work."}`);
+    lines.push("", "```text", item.prompt || "", "```");
   }
   lines.push("", "## Project Workflow Prompts");
   lines.push("Run these inside the relevant project to improve workflow through AGENTS.md, project skills, or specialized agents.");
@@ -849,7 +888,146 @@ function normalizeInsights(value, stats = {}, memoryHits = []) {
   );
   normalized.workflowPrompts = normalizeWorkflowPrompts(value.workflowPrompts, stats, normalized);
   normalized.actionPrompts = normalizeActionPrompts(value.actionPrompts, stats, normalized);
+  normalized.skillAgentSuggestions = normalizeSkillAgentSuggestions(value.skillAgentSuggestions, stats, normalized);
   return normalized;
+}
+
+function normalizeSkillAgentSuggestions(value, stats = {}, insights = {}) {
+  if (Array.isArray(value) && value.length > 0) {
+    return value.slice(0, 8).map((item) => ({
+      title: String(item.title || "Recommended skill or agent"),
+      kind: String(item.kind || "project skill"),
+      lane: String(item.lane || "recurring workflow"),
+      target: String(item.target || stats.projects?.[0]?.name || "project"),
+      why: String(item.why || "Reduce repeated discovery work and make done criteria explicit."),
+      prompt: normalizeCopyBlock(item.prompt || item.body || ""),
+    }));
+  }
+  return buildSkillAgentSuggestions(stats, insights);
+}
+
+function buildSkillAgentSuggestions(stats = {}, insights = {}) {
+  const projects = new Set((stats.projects || []).map((item) => item.name));
+  const targetFor = (name, fallback) => (projects.has(name) ? name : fallback);
+  const mainProject = stats.projects?.[0]?.name || "current project";
+  const hindering =
+    insights.atAGlance?.hindering ||
+    "Reactive build failures, auth verification, missing context, reruns, conflicts, and broad reviews create repeated discovery loops.";
+  const ambitious =
+    insights.atAGlance?.ambitious ||
+    "Create one workflow skill per recurring project lane, with inspection steps, commands, safety rules, and done criteria.";
+  return [
+    {
+      title: "Portal release/auth workflow skill",
+      kind: "project skill",
+      lane: "portal release/auth",
+      target: targetFor("oci-self-service-portal", mainProject),
+      why: `Encodes release, auth, dirty-tree, CI, and verification habits so Codex does not rediscover the portal operating model. Ambitious signal: ${ambitious}`,
+      prompt: buildSkillPrompt({
+        target: targetFor("oci-self-service-portal", mainProject),
+        title: "Portal release/auth workflow skill",
+        focus:
+          "portal release and auth work: AGENTS.md scope, package scripts, CI checks, auth surfaces, deployment evidence, dirty-tree preservation, and done criteria",
+      }),
+    },
+    {
+      title: "Observability verification skill",
+      kind: "project skill",
+      lane: "observability verification",
+      target: targetFor("cloudnow-observability", "cloudnow-observability"),
+      why: "Turns approval-gated verification, access checks, source-only runs, and evidence packets into a repeatable workflow.",
+      prompt: buildSkillPrompt({
+        target: targetFor("cloudnow-observability", "cloudnow-observability"),
+        title: "Observability verification skill",
+        focus:
+          "observability verification: source-only validation, approval boundaries, Cloudflare Access checks, deploy evidence, rollback notes, and final acceptance packets",
+      }),
+    },
+    {
+      title: "Quiz security review skill",
+      kind: "project skill",
+      lane: "quiz security",
+      target: targetFor("oci-genai-dev-quiz", "oci-genai-dev-quiz"),
+      why: "Packages repeated security, token, auth, and CI review work into a repo-specific security workflow.",
+      prompt: buildSkillPrompt({
+        target: targetFor("oci-genai-dev-quiz", "oci-genai-dev-quiz"),
+        title: "Quiz security review skill",
+        focus:
+          "quiz security: auth/session behavior, player token handling, CI checks, security-sensitive files, acceptance proof, and release-safe reporting",
+      }),
+    },
+    {
+      title: "Oracle memory architecture skill",
+      kind: "project skill",
+      lane: "Oracle memory",
+      target: targetFor("codex-oracle-agentmemory", "codex-oracle-agentmemory"),
+      why: "Preserves architecture boundaries, Local V1 verification, schema rules, and Oracle Agent Memory commands across sessions.",
+      prompt: buildSkillPrompt({
+        target: targetFor("codex-oracle-agentmemory", "codex-oracle-agentmemory"),
+        title: "Oracle memory architecture skill",
+        focus:
+          "Oracle memory architecture: model/tool/storage boundaries, schema policy, Local V1 acceptance tests, repo venv commands, and safe verification",
+      }),
+    },
+    {
+      title: "Codex plugin development skill",
+      kind: "project skill",
+      lane: "Codex plugin development",
+      target: targetFor("codex-insights", "codex-insights"),
+      why: "Makes plugin validation, report UI review, redaction safety, and real-data smoke testing repeatable.",
+      prompt: buildSkillPrompt({
+        target: targetFor("codex-insights", "codex-insights"),
+        title: "Codex plugin development skill",
+        focus:
+          "Codex plugin development: plugin manifest, command and skill docs, analyzer tests, redaction review, report UI preview, and npm validation commands",
+      }),
+    },
+    {
+      title: "Build/action failure triage agent",
+      kind: "specialist agent",
+      lane: "build and action failures",
+      target: mainProject,
+      why: `Addresses the hindering pattern directly: ${hindering}`,
+      prompt: buildAgentPrompt({
+        target: mainProject,
+        title: "Build/action failure triage agent",
+        mission:
+          "triage failed builds, failed actions, reruns, conflicts, and command loops by reproducing the exact failing boundary, proposing the smallest fix, and returning proof",
+      }),
+    },
+    {
+      title: "Auth and secret verification agent",
+      kind: "specialist agent",
+      lane: "auth and secret verification",
+      target: mainProject,
+      why: "Separates safe presence/scope checks from secret exposure and keeps auth troubleshooting evidence-based.",
+      prompt: buildAgentPrompt({
+        target: mainProject,
+        title: "Auth and secret verification agent",
+        mission:
+          "verify auth/session behavior, credential presence, token scope, and runtime wiring without exposing secret values, then report redacted evidence and exact acceptance checks",
+      }),
+    },
+  ];
+}
+
+function buildSkillPrompt({ target, title, focus }) {
+  return [
+    `In ${target}, create or update a project Codex skill named "${title}".`,
+    `First inspect applicable AGENTS.md files, repo layout, scripts, tests, docs, and recent workflow conventions for ${focus}.`,
+    "Write a concise SKILL.md with: when to use it, project inspection steps, common commands, safety rules, redaction/privacy rules, done criteria, and example prompts.",
+    "Keep it repo-grounded, avoid generic advice, do not include secrets, and run the relevant validation or documentation checks before finishing.",
+  ].join(" ");
+}
+
+function buildAgentPrompt({ target, title, mission }) {
+  return [
+    `In ${target}, define a specialist Codex agent named "${title}".`,
+    `Mission: ${mission}.`,
+    "Inspect existing AGENTS.md, scripts, tests, docs, and workflow pain points first.",
+    "Produce a copy-ready agent definition with owned surfaces, inputs it needs, step-by-step procedure, safety boundaries, verification commands, escalation rules, and handoff format.",
+    "If this repo stores agent definitions in a specific place, update that file; otherwise propose the smallest durable location and include the exact text to add.",
+  ].join(" ");
 }
 
 function normalizeActionPrompts(value, stats = {}, insights = {}) {

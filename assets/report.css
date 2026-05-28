@@ -165,7 +165,8 @@ body {
   margin-top: 14px;
 }
 
-.action-prompts-panel {
+.action-prompts-panel,
+.skill-agent-panel {
   grid-column: 1 / -1;
 }
 
@@ -831,10 +832,15 @@ code {
   font-size: 0.78rem;
 }
 
-.action-prompt p {
+.action-prompt p,
+.skill-agent-card p {
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.action-prompt > p {
   font-weight: 700;
 }
 

@@ -123,8 +123,10 @@ test("renderers include required report sections", () => {
   assert.match(html, /Coach&#39;s Read/);
   assert.match(html, /Custom Instructions/);
   assert.match(html, /Action Builder Prompts/);
+  assert.match(html, /Recommended Skills &amp; Agents/);
   assert.match(markdown, /Project Workflow Prompts/);
   assert.match(markdown, /Action Builder Prompts/);
+  assert.match(markdown, /Recommended Skills & Agents/);
   assert.match(markdown, /Prompt Quality/);
   assert.match(markdown, /Codex Settings &gt; Custom instructions|Codex Settings > Custom instructions/);
 });
@@ -139,6 +141,7 @@ test("buildCoachingPrompt asks for actionable coaching schema", () => {
   assert.match(prompt, /effectivenessMetrics/);
   assert.match(prompt, /workflowPrompts/);
   assert.match(prompt, /actionPrompts/);
+  assert.match(prompt, /skillAgentSuggestions/);
   assert.match(prompt, /roast/);
   assert.match(prompt, /customInstructions/);
   assert.match(prompt, /Codex Settings > Custom instructions/);

@@ -49,6 +49,7 @@ The command prints the generated path. Default HTML reports are written under th
 - **Prompt Quality**: a coaching score, diagnosis, and better prompt pattern.
 - **Custom Instructions**: paste-ready text for Codex Settings > Custom instructions.
 - **Action Builder Prompts**: five prompts that turn the strongest suggestions into scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists.
+- **Recommended Skills & Agents**: concrete project-lane skills and specialist agents to create, each with a copy-ready creation prompt.
 - **Suggested Instruction Changes**: copy-ready rules for AGENTS.md or local instructions.
 - **Project Workflow Prompts**: prompts to run inside projects to improve `AGENTS.md`, create project skills, or define specialist agents.
 
