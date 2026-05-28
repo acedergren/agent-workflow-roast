@@ -12,6 +12,7 @@ import {
   buildReport,
   cleanupOldTempReports,
   loadInputs,
+  mapSignalToArtifact,
   parseArgs,
   parseCodexJsonOutput,
   parseJsonl,
@@ -117,16 +118,17 @@ test("renderers include required report sections", () => {
   const html = renderHtml(report);
   const markdown = renderMarkdown(report);
 
-  assert.match(html, /Prompt metrics/);
+  assert.match(html, /Coaching targets/);
   assert.match(html, /Top Improvements/);
-  assert.match(html, /Effectiveness Dashboard/);
+  assert.match(html, /Good \/ Bad \/ Ugly/);
+  assert.match(html, /Coaching Targets/);
   assert.match(html, /Coach&#39;s Read/);
   assert.match(html, /Custom Instructions/);
-  assert.match(html, /Action Builder Prompts/);
-  assert.match(html, /Recommended Skills &amp; Agents/);
+  assert.match(html, /Create These Artifacts/);
+  assert.match(html, /Why this artifact/);
   assert.match(markdown, /Project Workflow Prompts/);
-  assert.match(markdown, /Action Builder Prompts/);
-  assert.match(markdown, /Recommended Skills & Agents/);
+  assert.match(markdown, /Create These Artifacts/);
+  assert.match(markdown, /Why this artifact/);
   assert.match(markdown, /Prompt Quality/);
   assert.match(markdown, /Codex Settings &gt; Custom instructions|Codex Settings > Custom instructions/);
 });
@@ -138,13 +140,21 @@ test("buildCoachingPrompt asks for actionable coaching schema", () => {
   assert.match(prompt, /engineering coach/);
   assert.match(prompt, /frictionAnalysis/);
   assert.match(prompt, /promptQuality/);
+  assert.match(prompt, /Coaching Targets/);
   assert.match(prompt, /effectivenessMetrics/);
   assert.match(prompt, /workflowPrompts/);
   assert.match(prompt, /actionPrompts/);
   assert.match(prompt, /skillAgentSuggestions/);
+  assert.match(prompt, /rationale/);
   assert.match(prompt, /roast/);
   assert.match(prompt, /customInstructions/);
   assert.match(prompt, /Codex Settings > Custom instructions/);
+});
+
+test("mapSignalToArtifact explains durable artifact placement", () => {
+  assert.deepEqual(mapSignalToArtifact("prompt quality needs clearer constraints").artifact, "custom instructions");
+  assert.deepEqual(mapSignalToArtifact("auth secret verification rule", "portal").artifact, "AGENTS.md rule");
+  assert.match(mapSignalToArtifact("rerun validation command loop").rationale, /script|command/i);
 });
 
 test("parseCodexJsonOutput extracts JSON from event streams", () => {

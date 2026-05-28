@@ -40,16 +40,15 @@ The command prints the generated path. Default HTML reports are written under th
 
 ## Report Sections
 
-- **At a glance**: what is working, what is hindering, the quick win, and the higher-leverage workflow.
+- **Good / Bad / Ugly**: a coaching-first top read that names what to keep, what to fix, the useful roast, and the next best move.
+- **Coaching Targets**: prompt quality, output effectiveness, token-effectiveness proxy, planning clarity, and tool leverage with coaching.
+- **Create These Artifacts**: one prioritized queue of copy-ready prompts for scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists, each with artifact rationale.
 - **Context Snapshot**: compact project and session counts without taking over the report.
 - **Coach's Read**: human-readable synthesis after raw signals are cooked down.
 - **Top Improvements**: practical behavior changes based on recent patterns.
-- **Effectiveness Dashboard**: prompt quality, output effectiveness, token-effectiveness proxy, planning clarity, and tool leverage with coaching.
 - **Friction Signals**: repeated markers such as auth drift, missing proof, failed checks, retries, or timeouts.
 - **Prompt Quality**: a coaching score, diagnosis, and better prompt pattern.
 - **Custom Instructions**: paste-ready text for Codex Settings > Custom instructions.
-- **Action Builder Prompts**: five prompts that turn the strongest suggestions into scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists.
-- **Recommended Skills & Agents**: concrete project-lane skills and specialist agents to create, each with a copy-ready creation prompt.
 - **Suggested Instruction Changes**: copy-ready rules for AGENTS.md or local instructions.
 - **Project Workflow Prompts**: prompts to run inside projects to improve `AGENTS.md`, create project skills, or define specialist agents.
 

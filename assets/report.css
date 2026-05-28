@@ -503,8 +503,107 @@ h2 {
   margin: 14px 24px 0;
 }
 
+.coaching-strip-panel {
+  margin: 14px 24px 0;
+}
+
 .effectiveness-panel {
   margin: 14px 24px 0;
+}
+
+.artifact-queue-panel {
+  margin: 14px 24px 0;
+}
+
+.gbu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.gbu-card {
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.gbu-card span,
+.artifact-badge,
+.artifact-priority {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid #cdebd8;
+  border-radius: 6px;
+  color: var(--green);
+  background: #f2fbf6;
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.gbu-card strong {
+  display: block;
+  margin-top: 10px;
+  color: #111827;
+  font-size: 0.96rem;
+}
+
+.gbu-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.artifact-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.artifact-card {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.artifact-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.artifact-priority {
+  color: var(--blue);
+  background: #f2f7ff;
+  border-color: #cfe0f7;
+}
+
+.artifact-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.artifact-card p {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.42;
+}
+
+.artifact-card code {
+  display: block;
+  max-width: none;
+  width: 100%;
+  margin-top: 10px;
 }
 
 .effectiveness-grid {
@@ -849,6 +948,8 @@ code {
   .details-grid,
   .coach-grid,
   .friction-coaching,
+  .gbu-grid,
+  .artifact-list,
   .effectiveness-grid,
   .effectiveness-metrics {
     grid-template-columns: 1fr;
@@ -884,6 +985,8 @@ code {
 
   .effectiveness-panel,
   .coaching-panel,
+  .coaching-strip-panel,
+  .artifact-queue-panel,
   .custom-instructions-panel {
     margin-right: 0;
     margin-left: 0;

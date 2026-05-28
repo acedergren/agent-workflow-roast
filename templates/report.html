@@ -22,20 +22,20 @@
           </div>
         </header>
         <nav class="quick-nav" aria-label="Report sections">
-          <a href="#effectiveness-dashboard">Prompt metrics</a>
+          <a href="#good-bad-ugly">Coach read</a>
+          <a href="#coaching-targets">Coaching targets</a>
           <a href="#coach-s-read">Coaching</a>
           <a href="#custom-instructions">Custom instructions</a>
-          <a href="#action-builder-prompts">Action prompts</a>
-          <a href="#recommended-skills-agents">Skills & agents</a>
+          <a href="#create-these-artifacts">Artifacts</a>
           <a href="#project-workflow-prompts">Project prompts</a>
           <a href="#friction-signals">Friction</a>
         </nav>
+        {{coachingHeader}}
         {{effectiveness}}
         {{coaching}}
         {{customInstructions}}
+        {{artifactQueue}}
         <section class="action-grid">
-          {{actionPrompts}}
-          {{skillAgentSuggestions}}
           {{prompts}}
           {{instructions}}
         </section>

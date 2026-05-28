@@ -413,9 +413,9 @@ export function buildCoachingPrompt(stats, memoryHits) {
     "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
     "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
     "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell Codex to inspect the project first and make durable, repo-grounded changes.",
-    "The actionPrompts field must contain exactly five copy-ready prompts that turn the five most effective suggestions into concrete artifacts: scripts, AGENTS.md updates, project skills, specialized agents, custom instructions for Codex Settings > Personalization, or checklists. Each prompt should be runnable as-is in a project or usable as paste-ready personalization text when that fits better.",
-    "The skillAgentSuggestions field must turn Coach's Read, the ambitious workflow, hindering patterns, build/action failures, and auth/secret verification into concrete recommended skills or agents with copy-ready creation prompts.",
-    "Include effectivenessMetrics for a dashboard. Use measured fields when present; otherwise label proxy metrics honestly. Cover prompt quality, output effectiveness, token effectiveness, planning clarity, and goal/acceptance clarity.",
+    "The actionPrompts field must contain exactly five copy-ready prompts that turn the five most effective suggestions into concrete artifacts: scripts, AGENTS.md updates, project skills, specialized agents, custom instructions for Codex Settings > Personalization, or checklists. Include a rationale explaining why that artifact type fits.",
+    "The skillAgentSuggestions field must turn Coach's Read, the ambitious workflow, hindering patterns, build/action failures, and auth/secret verification into concrete recommended skills or agents with copy-ready creation prompts and artifact rationale.",
+    "Include effectivenessMetrics for Coaching Targets. Use measured fields when present; otherwise label proxy metrics honestly. Cover prompt quality, output effectiveness, token effectiveness, planning clarity, and goal/acceptance clarity.",
     "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
     "Return only one JSON object. No markdown fences.",
     "Required JSON shape:",
@@ -467,6 +467,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
             title: "Turn suggestion into durable artifact",
             artifact: "script | AGENTS.md rule | skill | specialist agent | custom instructions | checklist",
             target: "project or repo name",
+            rationale: "why this belongs in that artifact type",
             prompt: "copy-ready prompt to run in that project",
           },
         ],
@@ -477,6 +478,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
             lane: "recurring project lane or friction lane",
             target: "project or repo name",
             why: "what repeated loop this prevents",
+            rationale: "why this should be a skill or agent rather than another artifact",
             prompt: "copy-ready prompt to create the skill or agent",
           },
         ],
@@ -571,9 +573,16 @@ export function renderHtml(report) {
     )}</div>`,
   );
 
+  const coachingHeader = panel(
+    "Good / Bad / Ugly",
+    '<p class="subtle">The blunt read before the details</p>',
+    renderGoodBadUgly(report.insights),
+    "panel coaching-strip-panel",
+  );
+
   const effectiveness = panel(
-    "Effectiveness Dashboard",
-    '<p class="subtle">Prompt quality, output usefulness, and token efficiency proxies with coaching examples</p>',
+    "Coaching Targets",
+    '<p class="subtle">Prompt quality, output usefulness, and token efficiency proxies mapped to better behavior</p>',
     renderEffectivenessDashboard(report.insights.effectivenessMetrics || buildEffectivenessMetrics(report.stats, report.insights)),
     "panel effectiveness-panel",
   );
@@ -608,37 +617,11 @@ export function renderHtml(report) {
     )}</div>`,
   );
 
-  const actionPrompts = panel(
-    "Action Builder Prompts",
-    '<p class="subtle">Copy these to convert the top five suggestions into scripts, AGENTS.md rules, skills, agents, custom instructions, or checklists</p>',
-    `<div class="mini-list action-list">${listOrEmpty(
-      report.insights.actionPrompts || buildActionPrompts(report.stats, report.insights),
-      (item) => `<div class="mini-item prompt-card action-prompt">
-        <div class="prompt-meta"><strong>${escapeHtml(item.title || "Action prompt")}</strong><span>${escapeHtml(
-          item.artifact || "artifact",
-        )}</span></div>
-        <p>${escapeHtml(item.target || "project")}</p>
-        <code>${escapeHtml(item.prompt || item)}</code>
-      </div>`,
-    )}</div>`,
-    "panel action-prompts-panel",
-  );
-
-  const skillAgentSuggestions = panel(
-    "Recommended Skills & Agents",
-    '<p class="subtle">Concrete project lanes and friction lanes to turn into reusable Codex skills or specialist agents</p>',
-    `<div class="mini-list skill-agent-list">${listOrEmpty(
-      report.insights.skillAgentSuggestions || buildSkillAgentSuggestions(report.stats, report.insights),
-      (item) => `<div class="mini-item prompt-card skill-agent-card">
-        <div class="prompt-meta"><strong>${escapeHtml(item.title || "Recommended skill or agent")}</strong><span>${escapeHtml(
-          item.kind || "skill",
-        )}</span></div>
-        <p><strong>${escapeHtml(item.lane || "Lane")}</strong> · ${escapeHtml(item.target || "project")}</p>
-        <p>${escapeHtml(item.why || "Reduce repeated discovery work.")}</p>
-        <code>${escapeHtml(item.prompt || item)}</code>
-      </div>`,
-    )}</div>`,
-    "panel skill-agent-panel",
+  const artifactQueue = panel(
+    "Create These Artifacts",
+    '<p class="subtle">Copy-ready prompts for durable workflow upgrades, with the mapping rationale visible</p>',
+    renderArtifactQueue(report.stats, report.insights),
+    "panel artifact-queue-panel",
   );
 
   const friction = panel(
@@ -671,11 +654,11 @@ export function renderHtml(report) {
     .replace("{{css}}", css)
     .replace("{{stats}}", stats)
     .replace("{{improvements}}", improvements)
+    .replace("{{coachingHeader}}", coachingHeader)
     .replace("{{effectiveness}}", effectiveness)
     .replace("{{coaching}}", coaching)
     .replace("{{customInstructions}}", customInstructions)
-    .replace("{{actionPrompts}}", actionPrompts)
-    .replace("{{skillAgentSuggestions}}", skillAgentSuggestions)
+    .replace("{{artifactQueue}}", artifactQueue)
     .replace("{{prompts}}", prompts)
     .replace("{{friction}}", friction)
     .replace("{{instructions}}", instructions)
@@ -702,7 +685,12 @@ export function renderMarkdown(report) {
   for (const item of report.stats.projects) lines.push(`- ${item.name}: ${item.count}`);
   lines.push("", "## Top Improvements");
   for (const item of report.insights.improvements) lines.push(`- ${item.title}: ${item.body}`);
-  lines.push("", "## Effectiveness Dashboard");
+  lines.push("", "## Good / Bad / Ugly");
+  lines.push(`- Good: ${glance.working || "Enough signal exists to identify active project areas."}`);
+  lines.push(`- Bad: ${glance.hindering || "Recurring friction markers need interpretation."}`);
+  lines.push(`- Ugly: ${report.insights.roast || "The recurring loop is costing more than it admits."}`);
+  lines.push(`- Next best move: ${(buildArtifactQueue(report.stats, report.insights)[0] || {}).title || "Create one durable workflow artifact."}`);
+  lines.push("", "## Coaching Targets");
   for (const item of report.insights.effectivenessMetrics || []) {
     lines.push(`- ${item.label}: ${item.value}/100. ${item.detail} Coaching: ${item.coaching}`);
   }
@@ -723,18 +711,13 @@ export function renderMarkdown(report) {
   lines.push("```text", report.insights.customInstructions || "", "```");
   lines.push("", "## Suggested Instruction Changes");
   for (const item of report.insights.instructions) lines.push(`- ${item}`);
-  lines.push("", "## Action Builder Prompts");
+  lines.push("", "## Create These Artifacts");
   lines.push("Run these to turn the strongest suggestions into concrete project artifacts.");
-  for (const item of report.insights.actionPrompts || buildActionPrompts(report.stats, report.insights)) {
-    lines.push("", `### ${item.title || "Action prompt"}`, `Artifact: ${item.artifact || "artifact"}`, `Target: ${item.target || "project"}`, "", "```text", item.prompt || item, "```");
-  }
-  lines.push("", "## Recommended Skills & Agents");
-  for (const item of report.insights.skillAgentSuggestions || buildSkillAgentSuggestions(report.stats, report.insights)) {
-    lines.push("", `### ${item.title || "Recommended skill or agent"}`);
-    lines.push(`Kind: ${item.kind || "project skill"}`);
-    lines.push(`Lane: ${item.lane || "recurring workflow"}`);
+  for (const item of buildArtifactQueue(report.stats, report.insights)) {
+    lines.push("", `### ${item.title || "Workflow artifact"}`);
+    lines.push(`Artifact: ${item.artifact || "artifact"}`);
     lines.push(`Target: ${item.target || "project"}`);
-    lines.push(`Why: ${item.why || "Reduce repeated discovery work."}`);
+    lines.push(`Why this artifact: ${item.rationale || "This is the smallest durable place for the workflow rule."}`);
     lines.push("", "```text", item.prompt || "", "```");
   }
   lines.push("", "## Project Workflow Prompts");
@@ -894,14 +877,21 @@ function normalizeInsights(value, stats = {}, memoryHits = []) {
 
 function normalizeSkillAgentSuggestions(value, stats = {}, insights = {}) {
   if (Array.isArray(value) && value.length > 0) {
-    return value.slice(0, 8).map((item) => ({
-      title: String(item.title || "Recommended skill or agent"),
-      kind: String(item.kind || "project skill"),
-      lane: String(item.lane || "recurring workflow"),
-      target: String(item.target || stats.projects?.[0]?.name || "project"),
-      why: String(item.why || "Reduce repeated discovery work and make done criteria explicit."),
-      prompt: normalizeCopyBlock(item.prompt || item.body || ""),
-    }));
+    return value.slice(0, 8).map((item) => {
+      const mapping = mapSignalToArtifact(
+        `${item.title || ""} ${item.kind || ""} ${item.lane || ""} ${item.why || ""}`,
+        item.target || stats.projects?.[0]?.name || "project",
+      );
+      return {
+        title: String(item.title || "Recommended skill or agent"),
+        kind: String(item.kind || "project skill"),
+        lane: String(item.lane || "recurring workflow"),
+        target: String(item.target || stats.projects?.[0]?.name || "project"),
+        why: String(item.why || "Reduce repeated discovery work and make done criteria explicit."),
+        rationale: String(item.rationale || mapping.rationale),
+        prompt: normalizeCopyBlock(item.prompt || item.body || ""),
+      };
+    });
   }
   return buildSkillAgentSuggestions(stats, insights);
 }
@@ -923,6 +913,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "portal release/auth",
       target: targetFor("oci-self-service-portal", mainProject),
       why: `Encodes release, auth, dirty-tree, CI, and verification habits so Codex does not rediscover the portal operating model. Ambitious signal: ${ambitious}`,
+      rationale: "Recurring release/auth work needs project-specific inspection steps, commands, safety rules, and done criteria, so it belongs in a skill.",
       prompt: buildSkillPrompt({
         target: targetFor("oci-self-service-portal", mainProject),
         title: "Portal release/auth workflow skill",
@@ -936,6 +927,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "observability verification",
       target: targetFor("cloudnow-observability", "cloudnow-observability"),
       why: "Turns approval-gated verification, access checks, source-only runs, and evidence packets into a repeatable workflow.",
+      rationale: "Approval-gated verification is a recurring lane with strict proof rules, so it belongs in a skill rather than a loose prompt.",
       prompt: buildSkillPrompt({
         target: targetFor("cloudnow-observability", "cloudnow-observability"),
         title: "Observability verification skill",
@@ -949,6 +941,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "quiz security",
       target: targetFor("oci-genai-dev-quiz", "oci-genai-dev-quiz"),
       why: "Packages repeated security, token, auth, and CI review work into a repo-specific security workflow.",
+      rationale: "Security review needs repeatable scope, commands, and redaction rules, so a project skill is the durable artifact.",
       prompt: buildSkillPrompt({
         target: targetFor("oci-genai-dev-quiz", "oci-genai-dev-quiz"),
         title: "Quiz security review skill",
@@ -962,6 +955,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "Oracle memory",
       target: targetFor("codex-oracle-agentmemory", "codex-oracle-agentmemory"),
       why: "Preserves architecture boundaries, Local V1 verification, schema rules, and Oracle Agent Memory commands across sessions.",
+      rationale: "Architecture boundaries and verification commands are reusable project knowledge, so they belong in a skill.",
       prompt: buildSkillPrompt({
         target: targetFor("codex-oracle-agentmemory", "codex-oracle-agentmemory"),
         title: "Oracle memory architecture skill",
@@ -975,6 +969,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "Codex plugin development",
       target: targetFor("codex-insights", "codex-insights"),
       why: "Makes plugin validation, report UI review, redaction safety, and real-data smoke testing repeatable.",
+      rationale: "Plugin development has recurring safety and validation steps, so a project skill keeps future sessions from re-learning them.",
       prompt: buildSkillPrompt({
         target: targetFor("codex-insights", "codex-insights"),
         title: "Codex plugin development skill",
@@ -988,6 +983,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "build and action failures",
       target: mainProject,
       why: `Addresses the hindering pattern directly: ${hindering}`,
+      rationale: "Build/action failures are judgment-heavy triage work, so a specialist agent can own reproduction, root cause, and proof.",
       prompt: buildAgentPrompt({
         target: mainProject,
         title: "Build/action failure triage agent",
@@ -1001,6 +997,7 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       lane: "auth and secret verification",
       target: mainProject,
       why: "Separates safe presence/scope checks from secret exposure and keeps auth troubleshooting evidence-based.",
+      rationale: "Auth and secret verification needs strict safety boundaries and evidence discipline, so it fits a specialist agent.",
       prompt: buildAgentPrompt({
         target: mainProject,
         title: "Auth and secret verification agent",
@@ -1034,17 +1031,21 @@ function normalizeActionPrompts(value, stats = {}, insights = {}) {
   if (Array.isArray(value) && value.length > 0) {
     return value.slice(0, 5).map((item) => {
       if (typeof item === "string") {
+        const mapping = mapSignalToArtifact(item, stats.projects?.[0]?.name || "project");
         return {
           title: "Turn suggestion into artifact",
-          artifact: "workflow artifact",
+          artifact: mapping.artifact,
           target: stats.projects?.[0]?.name || "project",
+          rationale: mapping.rationale,
           prompt: normalizeCopyBlock(item),
         };
       }
+      const mapping = mapSignalToArtifact(`${item.title || ""} ${item.body || item.prompt || ""}`, item.target || stats.projects?.[0]?.name || "project");
       return {
         title: String(item.title || "Turn suggestion into artifact"),
-        artifact: String(item.artifact || "workflow artifact"),
+        artifact: String(item.artifact || mapping.artifact),
         target: String(item.target || stats.projects?.[0]?.name || "project"),
+        rationale: String(item.rationale || mapping.rationale),
         prompt: normalizeCopyBlock(item.prompt || item.body || ""),
       };
     });
@@ -1061,17 +1062,17 @@ function buildActionPrompts(stats = {}, insights = {}) {
     ...improvements.map((item, index) => ({
       title: item.title,
       suggestion: item.body,
-      artifact: artifactForSuggestion(`${item.title} ${item.body}`, index),
+      ...mapSignalToArtifact(`${item.title} ${item.body}`, project, index),
     })),
     ...metrics.map((item, index) => ({
       title: `Improve ${item.label}`,
       suggestion: item.coaching,
-      artifact: artifactForSuggestion(`${item.label} ${item.coaching}`, index + improvements.length),
+      ...mapSignalToArtifact(`${item.label} ${item.coaching}`, project, index + improvements.length),
     })),
     ...friction.map((item, index) => ({
       title: `Reduce ${item.category}`,
       suggestion: item.rule || item.coaching,
-      artifact: artifactForSuggestion(`${item.category} ${item.rule || item.coaching}`, index + improvements.length + metrics.length),
+      ...mapSignalToArtifact(`${item.category} ${item.rule || item.coaching}`, project, index + improvements.length + metrics.length),
     })),
   ]
     .filter((item) => item.title && item.suggestion)
@@ -1082,31 +1083,37 @@ function buildActionPrompts(stats = {}, insights = {}) {
       title: "Turn repeated workflows into scripts",
       suggestion: "Capture successful recurring workflows as checked scripts.",
       artifact: "script",
+      rationale: "Repeated command sequences belong in scripts so future sessions can run one known path instead of rediscovering it.",
     },
     {
       title: "Promote durable rules",
       suggestion: "Move repeated corrections into AGENTS.md.",
       artifact: "AGENTS.md rule",
+      rationale: "Repo-specific behavior belongs in AGENTS.md because it should travel with this project.",
     },
     {
       title: "Create project skill",
       suggestion: "Package project-specific workflow knowledge as a reusable skill.",
       artifact: "project skill",
+      rationale: "Recurring project lanes belong in skills because they need trigger rules, inspection steps, commands, and done criteria.",
     },
     {
       title: "Define specialist agent",
       suggestion: "Create a focused agent for high-friction recurring work.",
       artifact: "specialist agent",
+      rationale: "Judgment-heavy triage belongs in a specialist agent because it needs scoped ownership and a repeatable handoff.",
     },
     {
       title: "Add acceptance checklist",
       suggestion: "Make completion proof explicit before implementation starts.",
       artifact: "checklist",
+      rationale: "Completion ambiguity belongs in a checklist because done criteria must be visible before execution starts.",
     },
     {
       title: "Update Codex personalization",
       suggestion: "Move broadly useful collaboration preferences into Codex custom instructions.",
       artifact: "custom instructions",
+      rationale: "Global working preferences belong in Codex custom instructions because they should apply across repositories.",
     },
   ];
 
@@ -1115,21 +1122,61 @@ function buildActionPrompts(stats = {}, insights = {}) {
     title: item.title,
     artifact: artifactMix[index] || item.artifact,
     target: project,
+    rationale: item.rationale || mapSignalToArtifact(`${item.title} ${item.suggestion}`, project, index).rationale,
     prompt: buildArtifactPrompt(project, { ...item, artifact: artifactMix[index] || item.artifact }),
   }));
 }
 
 function artifactForSuggestion(text, index = 0) {
+  return mapSignalToArtifact(text, "project", index).artifact;
+}
+
+export function mapSignalToArtifact(text, target = "project", index = 0) {
   const lower = String(text).toLowerCase();
-  if (/prompt quality|outcome|constraints|what not to touch|token effectiveness|acceptance criteria|planning clarity/.test(lower)) {
-    return "custom instructions";
+  if (/prompt quality|outcome|constraints|what not to touch|token effectiveness|planning clarity/.test(lower)) {
+    return {
+      artifact: "custom instructions",
+      rationale: "This is a global collaboration preference, so it belongs in Codex personalization instead of one repo.",
+    };
   }
-  if (/promote|instruction|agents\.md|rule|preserve|secret|auth|scope/.test(lower)) return "AGENTS.md rule";
-  if (/skill|repeat|workflow|domain|project|bounded evidence|report/.test(lower)) return "project skill";
-  if (/agent|specialist|triage|debug|review/.test(lower)) return "specialist agent";
-  if (/script|command|tool|rerun|ci|validation/.test(lower)) return "script";
-  if (/verify|proof|acceptance|done|check/.test(lower)) return "checklist";
-  return ["custom instructions", "script", "AGENTS.md rule", "project skill", "specialist agent"][index % 5];
+  if (/promote|instruction|agents\.md|rule|preserve|secret|auth|scope/.test(lower)) {
+    return {
+      artifact: "AGENTS.md rule",
+      rationale: `This is repo-specific operating guidance for ${target}, so it should live where future agents will read it before editing.`,
+    };
+  }
+  if (/skill|repeat|workflow|domain|project|bounded evidence|report|lane/.test(lower)) {
+    return {
+      artifact: "project skill",
+      rationale: "This is a recurring workflow lane, so it needs trigger rules, inspection steps, commands, and done criteria.",
+    };
+  }
+  if (/agent|specialist|triage|debug|review/.test(lower)) {
+    return {
+      artifact: "specialist agent",
+      rationale: "This is judgment-heavy recurring work, so a scoped specialist agent can own the investigation and handoff.",
+    };
+  }
+  if (/script|command|tool|rerun|ci|validation/.test(lower)) {
+    return {
+      artifact: "script",
+      rationale: "This is a repeatable command sequence, so a script reduces token-heavy rediscovery and copy/paste drift.",
+    };
+  }
+  if (/verify|proof|acceptance|done|check/.test(lower)) {
+    return {
+      artifact: "checklist",
+      rationale: "This is a done-criteria problem, so a checklist makes acceptance proof explicit before work starts.",
+    };
+  }
+  const fallback = [
+    ["custom instructions", "This looks like a broad collaboration preference, so start with Codex personalization."],
+    ["script", "This can likely become a repeatable command path with less future narration."],
+    ["AGENTS.md rule", `This likely belongs near ${target} because future agents need the rule before touching files.`],
+    ["project skill", "This looks like reusable project knowledge that deserves a triggerable workflow."],
+    ["specialist agent", "This may need a focused agent if it recurs with judgment-heavy branching."],
+  ][index % 5];
+  return { artifact: fallback[0], rationale: fallback[1] };
 }
 
 function buildArtifactPrompt(project, item) {
@@ -1298,6 +1345,32 @@ function buildCustomInstructionsArtifact(stats = {}, insights = {}, memoryHits =
   return lines.join("\n");
 }
 
+function buildArtifactQueue(stats = {}, insights = {}) {
+  const actionPrompts = normalizeActionPrompts(insights.actionPrompts, stats, insights);
+  const skillAgents = normalizeSkillAgentSuggestions(insights.skillAgentSuggestions, stats, insights);
+  const seen = new Set();
+  return [...actionPrompts, ...skillAgents]
+    .map((item) => {
+      const artifact = item.artifact || item.kind || mapSignalToArtifact(`${item.title || ""} ${item.why || ""}`).artifact;
+      const target = item.target || stats.projects?.[0]?.name || "project";
+      const mapping = mapSignalToArtifact(`${item.title || ""} ${artifact} ${item.why || item.prompt || ""}`, target);
+      return {
+        title: item.title || "Workflow artifact",
+        artifact,
+        target,
+        rationale: item.rationale || mapping.rationale,
+        prompt: item.prompt || "",
+      };
+    })
+    .filter((item) => {
+      const key = `${item.title}:${item.artifact}:${item.target}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return item.prompt;
+    })
+    .slice(0, 7);
+}
+
 function normalizeCopyBlock(value) {
   const text = String(value || "").trim();
   if (!text) return "";
@@ -1395,6 +1468,44 @@ function renderNodeMap(projects, totalRows) {
       })
       .join("")}
   </div>`;
+}
+
+function renderGoodBadUgly(insights) {
+  const glance = insights.atAGlance || {};
+  return `<div class="gbu-grid">
+    ${coachSignal("Good", glance.working || "Recurring project patterns are visible enough to improve.", "Keep")}
+    ${coachSignal("Bad", glance.hindering || "Reactive loops and missing proof are costing time.", "Fix")}
+    ${coachSignal(
+      "Ugly",
+      insights.roast || "The workflow is productive, but it keeps making future-you pay interest on unwritten rules.",
+      "Roast",
+    )}
+    ${coachSignal("Next best move", (buildArtifactQueue({}, insights)[0] || {}).title || "Create one durable workflow artifact.", "Do first")}
+  </div>`;
+}
+
+function coachSignal(label, body, badge) {
+  return `<article class="gbu-card">
+    <span>${escapeHtml(badge)}</span>
+    <strong>${escapeHtml(label)}</strong>
+    <p>${escapeHtml(body)}</p>
+  </article>`;
+}
+
+function renderArtifactQueue(stats, insights) {
+  return `<div class="artifact-list">${listOrEmpty(
+    buildArtifactQueue(stats, insights),
+    (item, index) => `<article class="artifact-card">
+      <div class="artifact-topline">
+        <span class="artifact-priority">P${escapeHtml(index + 1)}</span>
+        <span class="artifact-badge">${escapeHtml(item.artifact || "artifact")}</span>
+      </div>
+      <h3>${escapeHtml(item.title || "Workflow artifact")}</h3>
+      <p><strong>Target:</strong> ${escapeHtml(item.target || "project")}</p>
+      <p><strong>Why this artifact:</strong> ${escapeHtml(item.rationale || "This is the smallest durable place for the workflow rule.")}</p>
+      <code>${escapeHtml(item.prompt || "")}</code>
+    </article>`,
+  )}</div>`;
 }
 
 function renderFrictionTable(friction) {
