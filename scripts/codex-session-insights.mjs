@@ -378,6 +378,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
   };
   insights.customInstructions = buildCustomInstructionsArtifact(stats, insights, memoryHits);
   insights.workflowPrompts = buildWorkflowPrompts(stats, insights);
+  insights.actionPrompts = buildActionPrompts(stats, insights);
   return insights;
 }
 
@@ -411,6 +412,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
     "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
     "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
     "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell Codex to inspect the project first and make durable, repo-grounded changes.",
+    "The actionPrompts field must contain exactly five copy-ready prompts that turn the five most effective suggestions into concrete artifacts: scripts, AGENTS.md updates, project skills, specialized agents, custom instructions for Codex Settings > Personalization, or checklists. Each prompt should be runnable as-is in a project or usable as paste-ready personalization text when that fits better.",
     "Include effectivenessMetrics for a dashboard. Use measured fields when present; otherwise label proxy metrics honestly. Cover prompt quality, output effectiveness, token effectiveness, planning clarity, and goal/acceptance clarity.",
     "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
     "Return only one JSON object. No markdown fences.",
@@ -454,6 +456,14 @@ export function buildCoachingPrompt(stats, memoryHits) {
         workflowPrompts: [
           {
             title: "Improve repo instructions",
+            target: "project or repo name",
+            prompt: "copy-ready prompt to run in that project",
+          },
+        ],
+        actionPrompts: [
+          {
+            title: "Turn suggestion into durable artifact",
+            artifact: "script | AGENTS.md rule | skill | specialist agent | custom instructions | checklist",
             target: "project or repo name",
             prompt: "copy-ready prompt to run in that project",
           },
@@ -586,6 +596,22 @@ export function renderHtml(report) {
     )}</div>`,
   );
 
+  const actionPrompts = panel(
+    "Action Builder Prompts",
+    '<p class="subtle">Copy these to convert the top five suggestions into scripts, AGENTS.md rules, skills, agents, custom instructions, or checklists</p>',
+    `<div class="mini-list action-list">${listOrEmpty(
+      report.insights.actionPrompts || buildActionPrompts(report.stats, report.insights),
+      (item) => `<div class="mini-item prompt-card action-prompt">
+        <div class="prompt-meta"><strong>${escapeHtml(item.title || "Action prompt")}</strong><span>${escapeHtml(
+          item.artifact || "artifact",
+        )}</span></div>
+        <p>${escapeHtml(item.target || "project")}</p>
+        <code>${escapeHtml(item.prompt || item)}</code>
+      </div>`,
+    )}</div>`,
+    "panel action-prompts-panel",
+  );
+
   const friction = panel(
     "Friction Signals",
     '<p class="subtle">Issues slowing you down, detected from recent sessions</p>',
@@ -619,6 +645,7 @@ export function renderHtml(report) {
     .replace("{{effectiveness}}", effectiveness)
     .replace("{{coaching}}", coaching)
     .replace("{{customInstructions}}", customInstructions)
+    .replace("{{actionPrompts}}", actionPrompts)
     .replace("{{prompts}}", prompts)
     .replace("{{friction}}", friction)
     .replace("{{instructions}}", instructions)
@@ -666,6 +693,11 @@ export function renderMarkdown(report) {
   lines.push("```text", report.insights.customInstructions || "", "```");
   lines.push("", "## Suggested Instruction Changes");
   for (const item of report.insights.instructions) lines.push(`- ${item}`);
+  lines.push("", "## Action Builder Prompts");
+  lines.push("Run these to turn the strongest suggestions into concrete project artifacts.");
+  for (const item of report.insights.actionPrompts || buildActionPrompts(report.stats, report.insights)) {
+    lines.push("", `### ${item.title || "Action prompt"}`, `Artifact: ${item.artifact || "artifact"}`, `Target: ${item.target || "project"}`, "", "```text", item.prompt || item, "```");
+  }
   lines.push("", "## Project Workflow Prompts");
   lines.push("Run these inside the relevant project to improve workflow through AGENTS.md, project skills, or specialized agents.");
   for (const item of report.insights.workflowPrompts || promptsToWorkflowPrompts(report.insights.prompts)) {
@@ -816,7 +848,129 @@ function normalizeInsights(value, stats = {}, memoryHits = []) {
     value.customInstructions || buildCustomInstructionsArtifact(stats, normalized, memoryHits),
   );
   normalized.workflowPrompts = normalizeWorkflowPrompts(value.workflowPrompts, stats, normalized);
+  normalized.actionPrompts = normalizeActionPrompts(value.actionPrompts, stats, normalized);
   return normalized;
+}
+
+function normalizeActionPrompts(value, stats = {}, insights = {}) {
+  if (Array.isArray(value) && value.length > 0) {
+    return value.slice(0, 5).map((item) => {
+      if (typeof item === "string") {
+        return {
+          title: "Turn suggestion into artifact",
+          artifact: "workflow artifact",
+          target: stats.projects?.[0]?.name || "project",
+          prompt: normalizeCopyBlock(item),
+        };
+      }
+      return {
+        title: String(item.title || "Turn suggestion into artifact"),
+        artifact: String(item.artifact || "workflow artifact"),
+        target: String(item.target || stats.projects?.[0]?.name || "project"),
+        prompt: normalizeCopyBlock(item.prompt || item.body || ""),
+      };
+    });
+  }
+  return buildActionPrompts(stats, insights);
+}
+
+function buildActionPrompts(stats = {}, insights = {}) {
+  const project = stats.projects?.[0]?.name || "the current repo";
+  const improvements = Array.isArray(insights.improvements) ? insights.improvements : [];
+  const metrics = Array.isArray(insights.effectivenessMetrics) ? insights.effectivenessMetrics : [];
+  const friction = Array.isArray(insights.frictionAnalysis) ? insights.frictionAnalysis : [];
+  const suggestions = [
+    ...improvements.map((item, index) => ({
+      title: item.title,
+      suggestion: item.body,
+      artifact: artifactForSuggestion(`${item.title} ${item.body}`, index),
+    })),
+    ...metrics.map((item, index) => ({
+      title: `Improve ${item.label}`,
+      suggestion: item.coaching,
+      artifact: artifactForSuggestion(`${item.label} ${item.coaching}`, index + improvements.length),
+    })),
+    ...friction.map((item, index) => ({
+      title: `Reduce ${item.category}`,
+      suggestion: item.rule || item.coaching,
+      artifact: artifactForSuggestion(`${item.category} ${item.rule || item.coaching}`, index + improvements.length + metrics.length),
+    })),
+  ]
+    .filter((item) => item.title && item.suggestion)
+    .slice(0, 5);
+
+  const fallback = [
+    {
+      title: "Turn repeated workflows into scripts",
+      suggestion: "Capture successful recurring workflows as checked scripts.",
+      artifact: "script",
+    },
+    {
+      title: "Promote durable rules",
+      suggestion: "Move repeated corrections into AGENTS.md.",
+      artifact: "AGENTS.md rule",
+    },
+    {
+      title: "Create project skill",
+      suggestion: "Package project-specific workflow knowledge as a reusable skill.",
+      artifact: "project skill",
+    },
+    {
+      title: "Define specialist agent",
+      suggestion: "Create a focused agent for high-friction recurring work.",
+      artifact: "specialist agent",
+    },
+    {
+      title: "Add acceptance checklist",
+      suggestion: "Make completion proof explicit before implementation starts.",
+      artifact: "checklist",
+    },
+    {
+      title: "Update Codex personalization",
+      suggestion: "Move broadly useful collaboration preferences into Codex custom instructions.",
+      artifact: "custom instructions",
+    },
+  ];
+
+  const artifactMix = ["custom instructions", "script", "AGENTS.md rule", "project skill", "specialist agent"];
+  return [...suggestions, ...fallback].slice(0, 5).map((item, index) => ({
+    title: item.title,
+    artifact: artifactMix[index] || item.artifact,
+    target: project,
+    prompt: buildArtifactPrompt(project, { ...item, artifact: artifactMix[index] || item.artifact }),
+  }));
+}
+
+function artifactForSuggestion(text, index = 0) {
+  const lower = String(text).toLowerCase();
+  if (/prompt quality|outcome|constraints|what not to touch|token effectiveness|acceptance criteria|planning clarity/.test(lower)) {
+    return "custom instructions";
+  }
+  if (/promote|instruction|agents\.md|rule|preserve|secret|auth|scope/.test(lower)) return "AGENTS.md rule";
+  if (/skill|repeat|workflow|domain|project|bounded evidence|report/.test(lower)) return "project skill";
+  if (/agent|specialist|triage|debug|review/.test(lower)) return "specialist agent";
+  if (/script|command|tool|rerun|ci|validation/.test(lower)) return "script";
+  if (/verify|proof|acceptance|done|check/.test(lower)) return "checklist";
+  return ["custom instructions", "script", "AGENTS.md rule", "project skill", "specialist agent"][index % 5];
+}
+
+function buildArtifactPrompt(project, item) {
+  const artifact = item.artifact || "workflow artifact";
+  if (artifact === "custom instructions") {
+    return [
+      `Turn this suggestion into paste-ready Codex Settings > Personalization custom instructions: "${item.title}: ${item.suggestion}"`,
+      "Write concise first-person guidance that should apply across future Codex sessions, not just one repo.",
+      "Preserve the user's preference for repo-grounded execution, explicit acceptance proof, scoped changes, and durable artifacts.",
+      "Return only the custom-instructions text plus a one-sentence note explaining when it is too project-specific and should instead live in AGENTS.md.",
+    ].join(" ");
+  }
+  return [
+    `In ${project}, turn this suggestion into a concrete ${artifact}: "${item.title}: ${item.suggestion}"`,
+    "First inspect the repo layout, applicable AGENTS.md files, scripts, tests, and existing skills or docs.",
+    "Then implement the smallest durable artifact that would let Codex repeat this successful workflow with fewer loops.",
+    "Prefer repo-grounded changes such as a script with a documented command, a precise AGENTS.md rule, a project skill, a specialist-agent definition, a paste-ready custom-instructions update, or an acceptance checklist.",
+    "Run the relevant validation, keep unrelated files untouched, and finish with changed files, exact verification, and one example prompt showing how to use the artifact.",
+  ].join(" ");
 }
 
 function normalizeEffectivenessMetrics(value, stats = {}, insights = {}) {

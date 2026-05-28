@@ -48,6 +48,7 @@ The command prints the generated path. Default HTML reports are written under th
 - **Friction Signals**: repeated markers such as auth drift, missing proof, failed checks, retries, or timeouts.
 - **Prompt Quality**: a coaching score, diagnosis, and better prompt pattern.
 - **Custom Instructions**: paste-ready text for Codex Settings > Custom instructions.
+- **Action Builder Prompts**: five prompts that turn the strongest suggestions into scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists.
 - **Suggested Instruction Changes**: copy-ready rules for AGENTS.md or local instructions.
 - **Project Workflow Prompts**: prompts to run inside projects to improve `AGENTS.md`, create project skills, or define specialist agents.
 
