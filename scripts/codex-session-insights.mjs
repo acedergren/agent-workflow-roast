@@ -872,7 +872,7 @@ export function renderHtml(report) {
   const customInstructions = panel(
     "Custom Instructions",
     '<p class="subtle">Copy this into Codex Settings &gt; Custom instructions</p>',
-    `<div class="custom-instructions-copy"><textarea readonly spellcheck="false">${escapeHtml(
+    `<div class="custom-instructions-copy">${copyButton(report.insights.customInstructions || "", "Copy instructions")}<textarea readonly spellcheck="false">${escapeHtml(
       report.insights.customInstructions || "",
     )}</textarea></div>`,
     "panel custom-instructions-panel",
@@ -887,6 +887,7 @@ export function renderHtml(report) {
         <div class="prompt-meta"><strong>${escapeHtml(item.title || "Project prompt")}</strong><span>${escapeHtml(
           item.target || "project",
         )}</span></div>
+        ${copyButton(item.prompt || item, "Copy prompt")}
         <code>${escapeHtml(item.prompt || item)}</code>
       </div>`,
     )}</div>`,
@@ -911,7 +912,10 @@ export function renderHtml(report) {
     "",
     `<div class="mini-list">${listOrEmpty(
       report.insights.instructions,
-      (item) => `<div class="mini-item"><strong>Instruction</strong><p>${escapeHtml(item)}</p></div>`,
+      (item) => `<div class="mini-item copyable-item"><div class="copy-row"><strong>Instruction</strong>${copyButton(
+        item,
+        "Copy instruction",
+      )}</div><p>${escapeHtml(item)}</p></div>`,
     )}</div>`,
   );
 
@@ -1770,6 +1774,10 @@ function coachSignal(label, body, badge) {
   </article>`;
 }
 
+function copyButton(value, label = "Copy") {
+  return `<button type="button" class="copy-button" data-copy-text="${escapeHtml(value || "")}" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+}
+
 function renderArtifactQueue(stats, insights) {
   return `<div class="artifact-list">${listOrEmpty(
     buildArtifactQueue(stats, insights),
@@ -1781,6 +1789,7 @@ function renderArtifactQueue(stats, insights) {
       <h3>${escapeHtml(item.title || "Workflow artifact")}</h3>
       <p><strong>Target:</strong> ${escapeHtml(item.target || "project")}</p>
       <p><strong>Why this artifact:</strong> ${escapeHtml(item.rationale || "This is the smallest durable place for the workflow rule.")}</p>
+      ${copyButton(item.prompt || "", "Copy prompt")}
       <code>${escapeHtml(item.prompt || "")}</code>
     </article>`,
   )}</div>`;

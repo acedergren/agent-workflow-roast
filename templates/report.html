@@ -44,5 +44,43 @@
         </section>
       </main>
     </div>
+    <script>
+      (() => {
+        const copyWithFallback = async (text) => {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.setAttribute("readonly", "");
+          textarea.style.position = "fixed";
+          textarea.style.left = "-9999px";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        };
+
+        document.addEventListener("click", async (event) => {
+          const button = event.target.closest("[data-copy-text]");
+          if (!button) return;
+          const original = button.textContent;
+          try {
+            await copyWithFallback(button.dataset.copyText || "");
+            button.textContent = "Copied";
+            button.dataset.copied = "true";
+          } catch {
+            button.textContent = "Copy failed";
+            button.dataset.copied = "false";
+          } finally {
+            window.setTimeout(() => {
+              button.textContent = original;
+              delete button.dataset.copied;
+            }, 1600);
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

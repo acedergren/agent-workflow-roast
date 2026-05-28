@@ -174,6 +174,8 @@ test("renderers include required report sections", () => {
   assert.match(html, /Custom Instructions/);
   assert.match(html, /Create These Artifacts/);
   assert.match(html, /Why this artifact/);
+  assert.match(html, /data-copy-text/);
+  assert.match(html, /Copy prompt/);
   assert.match(markdown, /Project Workflow Prompts/);
   assert.match(markdown, /Create These Artifacts/);
   assert.match(markdown, /Estimated enterprise API savings/);

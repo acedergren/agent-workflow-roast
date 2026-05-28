@@ -579,6 +579,39 @@ h2 {
   line-height: 1.42;
 }
 
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  margin: 4px 0 0;
+  padding: 5px 10px;
+  color: var(--blue);
+  background: #f2f7ff;
+  border: 1px solid #cfe0f7;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.copy-button:hover {
+  background: #e8f1ff;
+}
+
+.copy-button[data-copied="true"] {
+  color: var(--green);
+  background: #f2fbf6;
+  border-color: #cdebd8;
+}
+
+.copy-button[data-copied="false"] {
+  color: var(--red);
+  background: #fff1ef;
+  border-color: #f0c2be;
+}
+
 .artifact-card code {
   display: block;
   max-width: none;
@@ -822,6 +855,10 @@ h2 {
   padding: 0 18px 18px;
 }
 
+.custom-instructions-copy .copy-button {
+  margin-bottom: 8px;
+}
+
 .custom-instructions-copy textarea {
   width: 100%;
   min-height: 220px;
@@ -1035,6 +1072,19 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 8px;
+}
+
+.copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.copy-row .copy-button,
+.prompt-card .copy-button,
+.artifact-card .copy-button {
   margin-bottom: 8px;
 }
 
