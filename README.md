@@ -12,7 +12,7 @@ The report is local-first and temporary by default. Durable files are written on
 - Optional memory context from `~/.codex/memories/MEMORY.md`.
 - Bounded JSONL reads so large Codex installs do not exhaust memory.
 - Secret, URL, email, and noisy-config redaction before rendering or synthesis.
-- LLM coaching pass that turns raw stats into a working-style narrative, friction coaching, prompt-quality feedback, a copy-ready Codex custom-instructions artifact, generated rules, and ready-to-use prompts.
+- LLM coaching pass that turns raw stats into a working-style narrative, friction coaching, prompt-quality feedback, a playful roast, a copy-ready Codex custom-instructions artifact, generated rules, and project workflow prompts.
 - `--no-ai` mode for deterministic local-only coaching.
 - Single-file playground for tuning the coaching prompt and report shape.
 
@@ -44,11 +44,12 @@ The command prints the generated path. Default HTML reports are written under th
 - **Workflow Pattern Map**: top project areas and session distribution.
 - **Coach's Read**: human-readable synthesis after raw signals are cooked down.
 - **Top Improvements**: practical behavior changes based on recent patterns.
+- **Effectiveness Dashboard**: prompt quality, output effectiveness, token-effectiveness proxy, planning clarity, and tool leverage with coaching.
 - **Friction Signals**: repeated markers such as auth drift, missing proof, failed checks, retries, or timeouts.
 - **Prompt Quality**: a coaching score, diagnosis, and better prompt pattern.
 - **Custom Instructions**: paste-ready text for Codex Settings > Custom instructions.
 - **Suggested Instruction Changes**: copy-ready rules for AGENTS.md or local instructions.
-- **Ready-to-use Prompt Patterns**: prompts you can reuse immediately.
+- **Project Workflow Prompts**: prompts to run inside projects to improve `AGENTS.md`, create project skills, or define specialist agents.
 
 ## Options
 

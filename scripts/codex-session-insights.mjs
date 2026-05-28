@@ -225,6 +225,10 @@ export function analyzeRows(rows, options = {}) {
     totalRows: 0,
     malformedRows: options.malformedRows || 0,
     sessions: 0,
+    textChars: 0,
+    verificationMentions: 0,
+    planningMentions: 0,
+    goalMentions: 0,
     projects: new Map(),
     tools: new Map(),
     friction: new Map(),
@@ -236,6 +240,7 @@ export function analyzeRows(rows, options = {}) {
     if (timestamp && timestamp < cutoff) continue;
     stats.totalRows += 1;
     const text = extractText(row);
+    stats.textChars += text.length;
     const cwd = extractCwd(row);
     const project = projectFromCwd(cwd);
     stats.projects.set(project, (stats.projects.get(project) || 0) + 1);
@@ -243,6 +248,9 @@ export function analyzeRows(rows, options = {}) {
       stats.tools.set(tool, (stats.tools.get(tool) || 0) + 1);
     }
     const lower = text.toLowerCase();
+    if (/test|verify|proof|screenshot|log|passed|validation|smoke/.test(lower)) stats.verificationMentions += 1;
+    if (/plan|planning|approach|sequence|roadmap|next step/.test(lower)) stats.planningMentions += 1;
+    if (/goal|acceptance|done|outcome|success criteria/.test(lower)) stats.goalMentions += 1;
     for (const marker of FRICTION_MARKERS) {
       if (lower.includes(marker)) stats.friction.set(marker, (stats.friction.get(marker) || 0) + 1);
     }
@@ -286,6 +294,10 @@ function serializeStats(stats) {
     totalRows: stats.totalRows,
     malformedRows: stats.malformedRows,
     sessions: stats.sessions,
+    textChars: stats.textChars,
+    verificationMentions: stats.verificationMentions,
+    planningMentions: stats.planningMentions,
+    goalMentions: stats.goalMentions,
     projects: top(stats.projects, 10),
     tools: top(stats.tools, 10),
     friction: top(stats.friction, 10),
@@ -321,6 +333,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
       ambitious: "Turn repeated corrections into durable local instructions, hooks, or command defaults.",
     },
     narrative: `Your recent Codex workflow looks execution-heavy and verification-oriented, with most attention landing on ${mainProject}. The next leverage point is converting repeated friction into clearer pre-flight prompts and reusable rules.`,
+    roast: `You are clearly allergic to leaving work unverified, which is noble; the roast is that you sometimes make Codex rediscover the same house rules like it is a brand-new employee every morning.`,
     frictionAnalysis: stats.friction.slice(0, 4).map((item) => ({
       category: titleCase(item.name),
       count: item.count,
@@ -333,6 +346,9 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
       diagnosis: "Prompts appear action-oriented, but many would benefit from explicit acceptance proof and boundaries.",
       betterPrompt: `For ${mainProject}, first restate the desired outcome, constraints, and verification command. Then implement the smallest change and report the proof.`,
     },
+    effectivenessMetrics: buildEffectivenessMetrics(stats, {
+      promptQuality: { score: 72 },
+    }),
     improvements: [
       {
         title: "Start reports from bounded evidence",
@@ -361,6 +377,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
     ],
   };
   insights.customInstructions = buildCustomInstructionsArtifact(stats, insights, memoryHits);
+  insights.workflowPrompts = buildWorkflowPrompts(stats, insights);
   return insights;
 }
 
@@ -390,8 +407,11 @@ export function buildCoachingPrompt(stats, memoryHits) {
   return [
     "You are an exacting but kind engineering coach reviewing recent Codex session patterns.",
     "The raw counts have already been computed. Your job is to turn them into a human-understandable retrospective with concrete coaching.",
-    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a Codex custom-instructions artifact, and ready-to-use prompts.",
+    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a Codex custom-instructions artifact, project workflow prompts, and ready-to-use prompts.",
     "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
+    "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
+    "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell Codex to inspect the project first and make durable, repo-grounded changes.",
+    "Include effectivenessMetrics for a dashboard. Use measured fields when present; otherwise label proxy metrics honestly. Cover prompt quality, output effectiveness, token effectiveness, planning clarity, and goal/acceptance clarity.",
     "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
     "Return only one JSON object. No markdown fences.",
     "Required JSON shape:",
@@ -405,6 +425,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
           ambitious: "one higher-leverage workflow to build",
         },
         narrative: "a personal working-style read grounded in the data",
+        roast: "affectionate, evidence-grounded roast with a useful coaching point",
         frictionAnalysis: [
           {
             category: "friction category name",
@@ -419,9 +440,24 @@ export function buildCoachingPrompt(stats, memoryHits) {
           diagnosis: "prompt quality diagnosis",
           betterPrompt: "copy-ready improved prompt pattern",
         },
+        effectivenessMetrics: [
+          {
+            label: "Prompt quality",
+            value: 72,
+            detail: "what this metric means",
+            coaching: "how to improve this metric",
+          },
+        ],
         improvements: [{ title: "imperative title", body: "why it matters and what to do" }],
         customInstructions: "copy-ready text for Codex Settings > Custom instructions",
         instructions: ["copy-ready instruction changes"],
+        workflowPrompts: [
+          {
+            title: "Improve repo instructions",
+            target: "project or repo name",
+            prompt: "copy-ready prompt to run in that project",
+          },
+        ],
         prompts: ["copy-ready prompts"],
       },
       null,
@@ -525,6 +561,13 @@ export function renderHtml(report) {
     )}</div>`,
   );
 
+  const effectiveness = panel(
+    "Effectiveness Dashboard",
+    '<p class="subtle">Prompt quality, output usefulness, and token efficiency proxies with coaching examples</p>',
+    renderEffectivenessDashboard(report.insights.effectivenessMetrics || buildEffectivenessMetrics(report.stats, report.insights)),
+    "panel effectiveness-panel",
+  );
+
   const coaching = panel(
     "Coach's Read",
     '<p class="subtle">Human-readable synthesis after the raw signals are cooked down</p>',
@@ -542,11 +585,16 @@ export function renderHtml(report) {
   );
 
   const prompts = panel(
-    "Ready-to-use Prompt Patterns",
-    "",
+    "Project Workflow Prompts",
+    '<p class="subtle">Copy these into the relevant project to improve repo instructions, skills, or specialist agents</p>',
     `<div class="mini-list">${listOrEmpty(
-      report.insights.prompts,
-      (item) => `<div class="mini-item prompt">${escapeHtml(item)}</div>`,
+      report.insights.workflowPrompts || promptsToWorkflowPrompts(report.insights.prompts),
+      (item) => `<div class="mini-item prompt-card">
+        <div class="prompt-meta"><strong>${escapeHtml(item.title || "Project prompt")}</strong><span>${escapeHtml(
+          item.target || "project",
+        )}</span></div>
+        <code>${escapeHtml(item.prompt || item)}</code>
+      </div>`,
     )}</div>`,
   );
 
@@ -581,6 +629,7 @@ export function renderHtml(report) {
     .replace("{{stats}}", stats)
     .replace("{{projectMap}}", projectMap)
     .replace("{{improvements}}", improvements)
+    .replace("{{effectiveness}}", effectiveness)
     .replace("{{coaching}}", coaching)
     .replace("{{customInstructions}}", customInstructions)
     .replace("{{prompts}}", prompts)
@@ -602,13 +651,23 @@ export function renderMarkdown(report) {
   lines.push(`- Projects: ${report.stats.projects.length}`);
   lines.push(`- Tool signals: ${report.stats.tools.length}`);
   lines.push(`- Friction signals: ${report.stats.friction.length}`);
+  lines.push(`- Verification mentions: ${report.stats.verificationMentions || 0}`);
+  lines.push(`- Planning mentions: ${report.stats.planningMentions || 0}`);
+  lines.push(`- Goal mentions: ${report.stats.goalMentions || 0}`);
   lines.push("", "## Workflow Pattern Map");
   for (const item of report.stats.projects) lines.push(`- ${item.name}: ${item.count}`);
   lines.push("", "## Top Improvements");
   for (const item of report.insights.improvements) lines.push(`- ${item.title}: ${item.body}`);
+  lines.push("", "## Effectiveness Dashboard");
+  for (const item of report.insights.effectivenessMetrics || []) {
+    lines.push(`- ${item.label}: ${item.value}/100. ${item.detail} Coaching: ${item.coaching}`);
+  }
   lines.push("", "## Friction Coaching");
   for (const item of report.insights.frictionAnalysis || []) {
     lines.push(`- ${item.category}: ${item.coaching} Rule: ${item.rule}`);
+  }
+  if (report.insights.roast) {
+    lines.push("", "## Coach's Roast", "", report.insights.roast);
   }
   if (report.insights.promptQuality) {
     lines.push("", "## Prompt Quality");
@@ -620,8 +679,11 @@ export function renderMarkdown(report) {
   lines.push("```text", report.insights.customInstructions || "", "```");
   lines.push("", "## Suggested Instruction Changes");
   for (const item of report.insights.instructions) lines.push(`- ${item}`);
-  lines.push("", "## Ready-to-use Prompt Patterns");
-  for (const item of report.insights.prompts) lines.push(`- \`${item}\``);
+  lines.push("", "## Project Workflow Prompts");
+  lines.push("Run these inside the relevant project to improve workflow through AGENTS.md, project skills, or specialized agents.");
+  for (const item of report.insights.workflowPrompts || promptsToWorkflowPrompts(report.insights.prompts)) {
+    lines.push("", `### ${item.title || "Project prompt"}`, `Target: ${item.target || "project"}`, "", "```text", item.prompt || item, "```");
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -741,6 +803,10 @@ function normalizeInsights(value, stats = {}, memoryHits = []) {
     summary: String(value.summary || "Recent Codex activity was analyzed."),
     atAGlance: normalizeAtAGlance(value.atAGlance),
     narrative: String(value.narrative || value.summary || "Recent Codex activity was analyzed."),
+    roast: String(
+      value.roast ||
+        "The workflow is productive, but it occasionally asks future-you to pay interest on instructions present-you could have written down.",
+    ),
     frictionAnalysis: Array.isArray(value.frictionAnalysis)
       ? value.frictionAnalysis.slice(0, 6).map((item) => ({
           category: String(item.category || "Friction"),
@@ -751,6 +817,7 @@ function normalizeInsights(value, stats = {}, memoryHits = []) {
         }))
       : [],
     promptQuality: normalizePromptQuality(value.promptQuality),
+    effectivenessMetrics: normalizeEffectivenessMetrics(value.effectivenessMetrics, stats, value),
     improvements: value.improvements.slice(0, 5).map((item) => ({
       title: String(item.title || "Improvement"),
       body: String(item.body || item),
@@ -761,7 +828,131 @@ function normalizeInsights(value, stats = {}, memoryHits = []) {
   normalized.customInstructions = normalizeCopyBlock(
     value.customInstructions || buildCustomInstructionsArtifact(stats, normalized, memoryHits),
   );
+  normalized.workflowPrompts = normalizeWorkflowPrompts(value.workflowPrompts, stats, normalized);
   return normalized;
+}
+
+function normalizeEffectivenessMetrics(value, stats = {}, insights = {}) {
+  if (Array.isArray(value) && value.length > 0) {
+    return value.slice(0, 6).map((item) => ({
+      label: String(item.label || "Effectiveness"),
+      value: clampScore(item.value),
+      detail: String(item.detail || "Derived from recent session signals."),
+      coaching: String(item.coaching || "Make the next prompt more explicit about goal, plan, proof, and stop condition."),
+    }));
+  }
+  return buildEffectivenessMetrics(stats, insights);
+}
+
+function buildEffectivenessMetrics(stats = {}, insights = {}) {
+  const rows = Math.max(1, stats.totalRows || 0);
+  const frictionCount = frictionTotal(stats.friction || []);
+  const toolCount = toolTotal(stats.tools || []);
+  const verificationRate = (stats.verificationMentions || 0) / rows;
+  const planningRate = (stats.planningMentions || 0) / rows;
+  const goalRate = (stats.goalMentions || 0) / rows;
+  const frictionRate = frictionCount / rows;
+  const avgChars = (stats.textChars || 0) / rows;
+  const promptScore = clampScore(insights.promptQuality?.score || 70);
+  return [
+    {
+      label: "Prompt quality",
+      value: promptScore,
+      detail: "Coach score for clarity, boundaries, and proof expectations.",
+      coaching: "Start with outcome, constraints, verification command, and what not to touch.",
+    },
+    {
+      label: "Output effectiveness",
+      value: clampScore(60 + verificationRate * 60 - frictionRate * 18),
+      detail: "Proxy from verification language versus repeated friction.",
+      coaching: "Ask for proof artifacts up front: tests, screenshots, logs, URLs, or exact diffs.",
+    },
+    {
+      label: "Token effectiveness",
+      value: clampScore(76 - Math.min(28, avgChars / 360) - frictionRate * 10 + goalRate * 25),
+      detail: "Proxy from text volume, goal clarity, and friction density; exact token counts are not available.",
+      coaching: "Front-load acceptance criteria so fewer turns are spent renegotiating the task.",
+    },
+    {
+      label: "Planning clarity",
+      value: clampScore(54 + planningRate * 80 + goalRate * 40 - frictionRate * 12),
+      detail: "Proxy from planning and goal language in recent sessions.",
+      coaching: "Use a short plan only when it changes execution; otherwise move quickly to a checked first step.",
+    },
+    {
+      label: "Tool leverage",
+      value: clampScore(50 + Math.min(35, (toolCount / rows) * 40) + verificationRate * 20),
+      detail: "Proxy from concrete tool usage and verification follow-through.",
+      coaching: "Pair every meaningful tool call with the reason it proves or narrows the work.",
+    },
+  ];
+}
+
+function clampScore(value) {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return 70;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function normalizeWorkflowPrompts(value, stats = {}, insights = {}) {
+  if (Array.isArray(value) && value.length > 0) {
+    return value.slice(0, 6).map((item) => {
+      if (typeof item === "string") {
+        return { title: "Workflow improvement prompt", target: stats.projects?.[0]?.name || "project", prompt: item };
+      }
+      return {
+        title: String(item.title || "Workflow improvement prompt"),
+        target: String(item.target || stats.projects?.[0]?.name || "project"),
+        prompt: normalizeCopyBlock(item.prompt || item.body || ""),
+      };
+    });
+  }
+  return buildWorkflowPrompts(stats, insights);
+}
+
+function buildWorkflowPrompts(stats = {}, insights = {}) {
+  const projects = stats.projects?.length ? stats.projects.slice(0, 3) : [{ name: "the current repo", count: 0 }];
+  const friction = stats.friction?.[0]?.name || "repeated workflow friction";
+  const rule = insights.instructions?.[0] || insights.frictionAnalysis?.[0]?.rule || "Require explicit verification before completion.";
+  const mainProject = projects[0].name;
+  return [
+    {
+      title: "Tighten AGENTS.md",
+      target: mainProject,
+      prompt: [
+        "Read this project's AGENTS.md files, package scripts, tests, and recent workflow friction.",
+        `Update or create the narrowest AGENTS.md guidance that would prevent ${friction}.`,
+        `Prefer concrete commands, safety rules, verification expectations, and one reusable rule like: ${rule}`,
+        "Keep the edit concise, repo-grounded, and run the relevant validation before committing.",
+      ].join(" "),
+    },
+    {
+      title: "Create a project skill",
+      target: mainProject,
+      prompt: [
+        "Inspect this project for repeated tasks, fragile commands, and domain-specific workflow knowledge.",
+        "Create or propose a project-related Codex skill that helps future sessions do this work reliably.",
+        "Include when to use it, exact commands, safety checks, expected artifacts, and examples based on this repo.",
+      ].join(" "),
+    },
+    {
+      title: "Define a specialist agent",
+      target: projects[1]?.name || mainProject,
+      prompt: [
+        "Review this project and identify one specialized agent role that would reduce repeated back-and-forth.",
+        "Draft the agent's mission, owned files or surfaces, inputs it needs, checks it must run, and what it should hand back.",
+        "Be practical: the agent should remove a real bottleneck, not become a ceremonial meeting with a prompt attached.",
+      ].join(" "),
+    },
+  ];
+}
+
+function promptsToWorkflowPrompts(prompts = []) {
+  return prompts.map((prompt, index) => ({
+    title: index === 0 ? "Run insight" : "Reusable prompt",
+    target: "Codex workflow",
+    prompt,
+  }));
 }
 
 function buildCustomInstructionsArtifact(stats = {}, insights = {}, memoryHits = []) {
@@ -907,6 +1098,48 @@ function renderFrictionTable(friction) {
   </table></div>`;
 }
 
+function renderEffectivenessDashboard(metrics) {
+  const items = metrics.length > 0 ? metrics : buildEffectivenessMetrics();
+  const values = items.map((item) => clampScore(item.value));
+  const points = values
+    .map((value, index) => {
+      const x = values.length === 1 ? 50 : 8 + (index * 84) / (values.length - 1);
+      const y = 92 - value * 0.78;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return `<div class="effectiveness-grid">
+    <div class="effectiveness-chart">
+      <svg viewBox="0 0 100 100" role="img" aria-label="Effectiveness score profile">
+        <line x1="8" y1="20" x2="92" y2="20"></line>
+        <line x1="8" y1="50" x2="92" y2="50"></line>
+        <line x1="8" y1="80" x2="92" y2="80"></line>
+        <polyline points="${escapeHtml(points)}"></polyline>
+        ${values
+          .map((value, index) => {
+            const x = values.length === 1 ? 50 : 8 + (index * 84) / (values.length - 1);
+            const y = 92 - value * 0.78;
+            return `<circle cx="${x}" cy="${y}" r="3"></circle>`;
+          })
+          .join("")}
+      </svg>
+      <p>Scores are coaching indicators, not benchmark claims. Token effectiveness is a proxy because exact token counts are not available in the local session rows.</p>
+    </div>
+    <div class="effectiveness-metrics">
+      ${items
+        .map(
+          (item) => `<article class="effectiveness-card">
+            <div class="metric-row"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(clampScore(item.value))}</span></div>
+            <div class="bar"><span style="width: ${escapeHtml(clampScore(item.value))}%"></span></div>
+            <p>${escapeHtml(item.detail)}</p>
+            <code>${escapeHtml(item.coaching)}</code>
+          </article>`,
+        )
+        .join("")}
+    </div>
+  </div>`;
+}
+
 function renderCoaching(insights) {
   const glance = insights.atAGlance || {};
   const promptQuality = insights.promptQuality || {};
@@ -915,6 +1148,7 @@ function renderCoaching(insights) {
     <article class="coach-narrative">
       <h3>Working style</h3>
       <p>${escapeHtml(insights.narrative || insights.summary)}</p>
+      <p class="roast">${escapeHtml(insights.roast || "")}</p>
     </article>
     <div class="glance-grid">
       ${coachTile("Working", glance.working)}

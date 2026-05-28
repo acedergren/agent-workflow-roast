@@ -161,6 +161,34 @@
         border-top: 1px solid var(--line);
       }
 
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric {
+        display: grid;
+        gap: 8px;
+      }
+
+      .metric strong {
+        color: var(--text);
+      }
+
+      .bar {
+        height: 7px;
+        overflow: hidden;
+        background: #26364a;
+        border-radius: 999px;
+      }
+
+      .bar span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, var(--blue), var(--green));
+      }
+
       code,
       pre {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -196,7 +224,8 @@
 
       @media (max-width: 900px) {
         .shell,
-        .preview {
+        .preview,
+        .metric-grid {
           grid-template-columns: 1fr;
         }
       }
@@ -264,6 +293,11 @@
           <div id="rules"></div>
         </section>
 
+        <section class="card">
+          <span class="pill">Effectiveness dashboard</span>
+          <div class="metric-grid" id="metrics"></div>
+        </section>
+
         <section class="prompt-box">
           <div class="prompt-head">
             <h2>Prompt to use in the analyzer</h2>
@@ -297,6 +331,7 @@
         narrative: document.getElementById("narrative"),
         glance: document.getElementById("glance"),
         rules: document.getElementById("rules"),
+        metrics: document.getElementById("metrics"),
         prompt: document.getElementById("prompt"),
         copy: document.getElementById("copy"),
       };
@@ -322,6 +357,7 @@
           ].map(([title, body]) => createGlanceCard(title, body)),
         );
         replaceChildren(elements.rules, frictionItems().map(createRule));
+        replaceChildren(elements.metrics, metricItems(strict).map(createMetric));
         elements.prompt.textContent = buildPrompt(strict);
       }
 
@@ -358,6 +394,30 @@
         return wrapper;
       }
 
+      function metricItems(strict) {
+        return [
+          ["Prompt quality", 55 + strict * 8, "Outcome, constraints, proof."],
+          ["Output effectiveness", state.outcome === "friction" ? 68 : 78, "Proof before polish."],
+          ["Token effectiveness", strict >= 4 ? 74 : 61, "Less renegotiation."],
+        ];
+      }
+
+      function createMetric([label, value, coaching]) {
+        const article = document.createElement("article");
+        article.className = "card metric";
+        const strong = document.createElement("strong");
+        strong.textContent = `${label}: ${value}`;
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        const fill = document.createElement("span");
+        fill.style.width = `${Math.max(0, Math.min(100, value))}%`;
+        const paragraph = document.createElement("p");
+        paragraph.textContent = coaching;
+        bar.append(fill);
+        article.append(strong, bar, paragraph);
+        return article;
+      }
+
       function buildPrompt(strict) {
         const parts = [
           "Turn raw Codex session stats into human-readable coaching.",
@@ -365,8 +425,11 @@
           `Optimize for ${state.outcome}.`,
           `Evidence strictness is ${strict}/5: ${strict >= 4 ? "label weak evidence and avoid overclaiming" : "allow more interpretive coaching"}.`,
           `Top observed friction: ${state.friction}`,
-          "Return JSON with summary, atAGlance, narrative, frictionAnalysis, promptQuality, improvements, customInstructions, instructions, and prompts.",
+          "Return JSON with summary, atAGlance, narrative, roast, frictionAnalysis, promptQuality, effectivenessMetrics, improvements, customInstructions, instructions, workflowPrompts, and prompts.",
+          "effectivenessMetrics should power a dashboard for prompt quality, output effectiveness, token-effectiveness proxy, planning clarity, and goal clarity.",
           "customInstructions must be plain text the user can paste into Codex Settings > Custom instructions.",
+          "workflowPrompts must be copy-ready prompts to run inside projects to improve AGENTS.md, create project skills, or define specialized agents.",
+          "Include an affectionate roast that is funny because it is true and useful.",
         ];
         return parts.join("\n");
       }

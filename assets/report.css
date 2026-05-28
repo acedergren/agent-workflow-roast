@@ -544,6 +544,116 @@ h2 {
   margin-top: 14px;
 }
 
+.effectiveness-panel {
+  margin-top: 14px;
+}
+
+.effectiveness-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+  gap: 14px;
+  padding: 0 18px 18px;
+}
+
+.effectiveness-chart,
+.effectiveness-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+}
+
+.effectiveness-chart {
+  padding: 14px;
+}
+
+.effectiveness-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+}
+
+.effectiveness-chart line {
+  stroke: #dfe6ef;
+  stroke-width: 1;
+}
+
+.effectiveness-chart polyline {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.effectiveness-chart circle {
+  fill: #fff;
+  stroke: var(--blue);
+  stroke-width: 3;
+}
+
+.effectiveness-chart p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.42;
+}
+
+.effectiveness-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.effectiveness-card {
+  padding: 12px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.metric-row strong {
+  font-size: 0.86rem;
+}
+
+.metric-row span {
+  color: var(--blue);
+  font-size: 1.2rem;
+  font-weight: 820;
+}
+
+.bar {
+  height: 8px;
+  overflow: hidden;
+  background: #dde6f2;
+  border-radius: 999px;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  border-radius: inherit;
+}
+
+.effectiveness-card p {
+  margin: 9px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.effectiveness-card code,
+.prompt-card code {
+  display: block;
+  max-width: none;
+  width: 100%;
+}
+
 .custom-instructions-panel {
   margin-top: 14px;
 }
@@ -593,6 +703,15 @@ h2 {
   color: var(--muted);
   font-size: 0.86rem;
   line-height: 1.5;
+}
+
+.coach-narrative .roast {
+  margin-top: 10px;
+  color: #7a4b14;
+  background: #fff8ec;
+  border: 1px solid #f2d7a8;
+  border-radius: 8px;
+  padding: 10px;
 }
 
 .glance-grid {
@@ -737,11 +856,30 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.prompt-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.prompt-meta strong {
+  font-size: 0.88rem;
+}
+
+.prompt-meta span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 @media (max-width: 1360px) {
   .top-grid,
   .bottom-grid,
   .coach-grid,
-  .friction-coaching {
+  .friction-coaching,
+  .effectiveness-grid,
+  .effectiveness-metrics {
     grid-template-columns: 1fr;
   }
 
