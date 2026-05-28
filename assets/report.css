@@ -608,7 +608,7 @@ h2 {
 
 .effectiveness-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(420px, 1.2fr) minmax(0, 0.8fr);
   gap: 14px;
   padding: 0 18px 18px;
 }
@@ -624,10 +624,60 @@ h2 {
   padding: 14px;
 }
 
-.effectiveness-chart svg {
+.spend-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.spend-summary div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.spend-summary span,
+.spend-summary small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.spend-summary strong {
+  display: block;
+  margin: 4px 0;
+  color: #111827;
+  font-size: 1.1rem;
+  line-height: 1.1;
+}
+
+.token-spend-chart {
+  margin: 0;
+}
+
+.token-spend-chart figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #111827;
+  font-size: 0.84rem;
+}
+
+.token-spend-chart figcaption span {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.token-spend-chart svg {
   display: block;
   width: 100%;
-  height: 180px;
+  height: auto;
+  min-height: 230px;
 }
 
 .effectiveness-chart line {
@@ -635,18 +685,64 @@ h2 {
   stroke-width: 1;
 }
 
-.effectiveness-chart polyline {
+.token-spend-chart text {
+  fill: var(--muted);
+  font-size: 0.74rem;
+  text-anchor: middle;
+}
+
+.actual-token-bar {
+  fill: rgba(37, 99, 235, 0.2);
+}
+
+.projected-token-bar {
+  fill: rgba(35, 152, 101, 0.24);
+}
+
+.actual-token-line,
+.projected-token-line {
   fill: none;
-  stroke: var(--blue);
-  stroke-width: 4;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.effectiveness-chart circle {
-  fill: #fff;
+.actual-token-line {
   stroke: var(--blue);
-  stroke-width: 3;
+}
+
+.projected-token-line {
+  stroke: var(--green);
+  stroke-dasharray: 6 5;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend i {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.actual-key {
+  background: var(--blue);
+}
+
+.projected-key {
+  background: var(--green);
 }
 
 .effectiveness-chart p {
@@ -964,6 +1060,7 @@ code {
   .friction-coaching,
   .gbu-grid,
   .artifact-list,
+  .spend-summary,
   .effectiveness-grid,
   .effectiveness-metrics {
     grid-template-columns: 1fr;

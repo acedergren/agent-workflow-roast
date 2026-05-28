@@ -22,6 +22,9 @@ const DEFAULT_DAYS = 14;
 const TEMP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const MAX_JSONL_BYTES = 2 * 1024 * 1024;
 const MAX_SESSION_FILES = 200;
+const ESTIMATED_CHARS_PER_TOKEN = 4;
+const DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION = 5;
+const DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION = 15;
 
 const SECRET_PATTERNS = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
@@ -211,6 +214,65 @@ export function extractToolNames(row) {
   return names;
 }
 
+function extractTokenUsage(row, text = "") {
+  const usage = findUsageObject(row);
+  const input = numberFromKeys(usage, [
+    "input_tokens",
+    "prompt_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+  ]);
+  const output = numberFromKeys(usage, ["output_tokens", "completion_tokens"]);
+  const totalFromUsage = Number(usage?.total_tokens || usage?.tokens_total || usage?.totalTokens || 0);
+  if (input > 0 || output > 0 || totalFromUsage > 0) {
+    const known = input + output;
+    const total = Math.max(totalFromUsage, known);
+    const inferredInput = input || Math.round(total * 0.7);
+    const inferredOutput = output || Math.max(0, total - inferredInput);
+    return { input: inferredInput, output: inferredOutput, total, measured: true };
+  }
+  const estimated = Math.max(1, Math.round(String(text || "").length / ESTIMATED_CHARS_PER_TOKEN));
+  return {
+    input: Math.round(estimated * 0.7),
+    output: Math.max(0, estimated - Math.round(estimated * 0.7)),
+    total: estimated,
+    measured: false,
+  };
+}
+
+function findUsageObject(value, depth = 0) {
+  if (depth > 5 || value == null || typeof value !== "object") return null;
+  if (
+    ["input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens", "tokens_total", "totalTokens"].some(
+      (key) => Number.isFinite(Number(value[key])),
+    )
+  ) {
+    return value;
+  }
+  for (const key of ["usage", "token_usage", "tokenUsage", "response", "payload", "item", "items", "content"]) {
+    const child = value[key];
+    if (Array.isArray(child)) {
+      for (const item of child.slice(0, 20)) {
+        const found = findUsageObject(item, depth + 1);
+        if (found) return found;
+      }
+    } else {
+      const found = findUsageObject(child, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function numberFromKeys(value, keys) {
+  if (!value || typeof value !== "object") return 0;
+  return keys.reduce((sum, key) => sum + (Number.isFinite(Number(value[key])) ? Number(value[key]) : 0), 0);
+}
+
+function dayKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
 export function projectFromCwd(cwd) {
   if (!cwd) return "unknown";
   const clean = cwd.replace(/\/$/, "");
@@ -224,6 +286,7 @@ export function analyzeRows(rows, options = {}) {
   const stats = {
     totalRows: 0,
     malformedRows: options.malformedRows || 0,
+    lookbackDays: options.days || DEFAULT_DAYS,
     sessions: 0,
     textChars: 0,
     verificationMentions: 0,
@@ -233,6 +296,11 @@ export function analyzeRows(rows, options = {}) {
     tools: new Map(),
     friction: new Map(),
     examples: [],
+    dailyTokens: new Map(),
+    measuredTokens: 0,
+    estimatedTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
   };
 
   for (const row of rows) {
@@ -241,6 +309,19 @@ export function analyzeRows(rows, options = {}) {
     stats.totalRows += 1;
     const text = extractText(row);
     stats.textChars += text.length;
+    const tokenUsage = extractTokenUsage(row, text);
+    stats.measuredTokens += tokenUsage.measured ? tokenUsage.total : 0;
+    stats.estimatedTokens += tokenUsage.measured ? 0 : tokenUsage.total;
+    stats.inputTokens += tokenUsage.input;
+    stats.outputTokens += tokenUsage.output;
+    const day = dayKey(timestamp || new Date());
+    const daily = stats.dailyTokens.get(day) || { day, input: 0, output: 0, total: 0, measured: 0, estimated: 0 };
+    daily.input += tokenUsage.input;
+    daily.output += tokenUsage.output;
+    daily.total += tokenUsage.total;
+    if (tokenUsage.measured) daily.measured += tokenUsage.total;
+    else daily.estimated += tokenUsage.total;
+    stats.dailyTokens.set(day, daily);
     const cwd = extractCwd(row);
     const project = projectFromCwd(cwd);
     stats.projects.set(project, (stats.projects.get(project) || 0) + 1);
@@ -293,8 +374,10 @@ function serializeStats(stats) {
   return {
     totalRows: stats.totalRows,
     malformedRows: stats.malformedRows,
+    lookbackDays: stats.lookbackDays,
     sessions: stats.sessions,
     textChars: stats.textChars,
+    tokenSpend: buildTokenSpend(stats),
     verificationMentions: stats.verificationMentions,
     planningMentions: stats.planningMentions,
     goalMentions: stats.goalMentions,
@@ -302,6 +385,98 @@ function serializeStats(stats) {
     tools: top(stats.tools, 10),
     friction: top(stats.friction, 10),
     examples: stats.examples,
+  };
+}
+
+function buildTokenSpend(stats) {
+  const actual = {
+    input: Math.round(stats.inputTokens || 0),
+    output: Math.round(stats.outputTokens || 0),
+    total: Math.round((stats.inputTokens || 0) + (stats.outputTokens || 0)),
+  };
+  const measured = Math.round(stats.measuredTokens || 0);
+  const estimated = Math.round(stats.estimatedTokens || 0);
+  const improvementRate = estimateTokenImprovementRate(stats);
+  const projected = scaleTokenTotals(actual, 1 - improvementRate);
+  const actualCost = estimateEnterpriseCost(actual);
+  const projectedCost = estimateEnterpriseCost(projected);
+  const dailyRows = fillDailyTokenRows(stats.dailyTokens, stats.lookbackDays || DEFAULT_DAYS);
+  const daily = dailyRows
+    .map((item) => {
+      const itemActual = { input: item.input, output: item.output, total: item.total };
+      const itemProjected = scaleTokenTotals(itemActual, 1 - improvementRate);
+      return {
+        day: item.day,
+        actual: Math.round(itemActual.total),
+        projected: itemProjected.total,
+        measured: Math.round(item.measured),
+        estimated: Math.round(item.estimated),
+        actualCost: estimateEnterpriseCost(itemActual),
+        projectedCost: estimateEnterpriseCost(itemProjected),
+      };
+    });
+  return {
+    actual,
+    projected,
+    measured,
+    estimated,
+    daily,
+    improvementRate,
+    actualCost,
+    projectedCost,
+    savings: {
+      tokens: Math.max(0, actual.total - projected.total),
+      cost: Math.max(0, actualCost.total - projectedCost.total),
+    },
+    rates: {
+      inputPerMillion: DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION,
+      outputPerMillion: DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION,
+      currency: "USD",
+    },
+    caveat:
+      measured > 0
+        ? "Uses measured token rows where available; remaining rows are estimated from redacted text volume."
+        : "No explicit token usage rows were found, so token spend is estimated from redacted text volume.",
+  };
+}
+
+function fillDailyTokenRows(dailyTokens, days) {
+  const count = Math.max(1, Math.min(31, Number(days) || DEFAULT_DAYS));
+  const rows = [];
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const date = new Date(today);
+    date.setUTCDate(today.getUTCDate() - offset);
+    const day = dayKey(date);
+    rows.push(dailyTokens.get(day) || { day, input: 0, output: 0, total: 0, measured: 0, estimated: 0 });
+  }
+  return rows;
+}
+
+function estimateTokenImprovementRate(stats) {
+  const rows = Math.max(1, stats.totalRows || 0);
+  const frictionRate = frictionTotal([...stats.friction.entries()].map(([name, count]) => ({ name, count }))) / rows;
+  const goalRate = (stats.goalMentions || 0) / rows;
+  const verificationRate = (stats.verificationMentions || 0) / rows;
+  return Math.max(0.08, Math.min(0.35, 0.12 + frictionRate * 0.55 - goalRate * 0.08 - verificationRate * 0.04));
+}
+
+function scaleTokenTotals(tokens, factor) {
+  return {
+    input: Math.round((tokens.input || 0) * factor),
+    output: Math.round((tokens.output || 0) * factor),
+    total: Math.round((tokens.total || 0) * factor),
+  };
+}
+
+function estimateEnterpriseCost(tokens) {
+  const input = ((tokens.input || 0) / 1_000_000) * DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION;
+  const output = ((tokens.output || 0) / 1_000_000) * DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION;
+  return {
+    input,
+    output,
+    total: input + output,
   };
 }
 
@@ -582,8 +757,11 @@ export function renderHtml(report) {
 
   const effectiveness = panel(
     "Coaching Targets",
-    '<p class="subtle">Prompt quality, output usefulness, and token efficiency proxies mapped to better behavior</p>',
-    renderEffectivenessDashboard(report.insights.effectivenessMetrics || buildEffectivenessMetrics(report.stats, report.insights)),
+    '<p class="subtle">Token spend, estimated enterprise API cost, and coaching metrics mapped to better behavior</p>',
+    renderEffectivenessDashboard(
+      report.insights.effectivenessMetrics || buildEffectivenessMetrics(report.stats, report.insights),
+      report.stats,
+    ),
     "panel effectiveness-panel",
   );
 
@@ -675,6 +853,9 @@ export function renderMarkdown(report) {
   lines.push("", "## Coach's Read", "", report.insights.narrative || report.insights.summary);
   lines.push("", "## Stats Snapshot");
   lines.push(`- Rows analyzed: ${report.stats.totalRows}`);
+  lines.push(`- Estimated tokens: ${formatNumber(report.stats.tokenSpend?.actual?.total || 0)}`);
+  lines.push(`- Projected tokens after improvements: ${formatNumber(report.stats.tokenSpend?.projected?.total || 0)}`);
+  lines.push(`- Estimated enterprise API savings: ${formatCurrency(report.stats.tokenSpend?.savings?.cost || 0)}`);
   lines.push(`- Projects: ${report.stats.projects.length}`);
   lines.push(`- Tool signals: ${report.stats.tools.length}`);
   lines.push(`- Friction signals: ${report.stats.friction.length}`);
@@ -1535,32 +1716,18 @@ function renderFrictionTable(friction) {
   </table></div>`;
 }
 
-function renderEffectivenessDashboard(metrics) {
+function renderEffectivenessDashboard(metrics, stats = {}) {
   const items = metrics.length > 0 ? metrics : buildEffectivenessMetrics();
-  const values = items.map((item) => clampScore(item.value));
-  const points = values
-    .map((value, index) => {
-      const x = values.length === 1 ? 50 : 8 + (index * 84) / (values.length - 1);
-      const y = 92 - value * 0.78;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const tokenSpend = stats.tokenSpend || buildEmptyTokenSpend();
   return `<div class="effectiveness-grid">
     <div class="effectiveness-chart">
-      <svg viewBox="0 0 100 100" role="img" aria-label="Effectiveness score profile">
-        <line x1="8" y1="20" x2="92" y2="20"></line>
-        <line x1="8" y1="50" x2="92" y2="50"></line>
-        <line x1="8" y1="80" x2="92" y2="80"></line>
-        <polyline points="${escapeHtml(points)}"></polyline>
-        ${values
-          .map((value, index) => {
-            const x = values.length === 1 ? 50 : 8 + (index * 84) / (values.length - 1);
-            const y = 92 - value * 0.78;
-            return `<circle cx="${x}" cy="${y}" r="3"></circle>`;
-          })
-          .join("")}
-      </svg>
-      <p>Scores are coaching indicators, not benchmark claims. Token effectiveness is a proxy because exact token counts are not available in the local session rows.</p>
+      <div class="spend-summary">
+        <div><span>Actual est.</span><strong>${escapeHtml(formatNumber(tokenSpend.actual.total))}</strong><small>tokens</small></div>
+        <div><span>Improved scenario</span><strong>${escapeHtml(formatNumber(tokenSpend.projected.total))}</strong><small>tokens</small></div>
+        <div><span>API cost delta</span><strong>${escapeHtml(formatCurrency(tokenSpend.savings.cost))}</strong><small>saved</small></div>
+      </div>
+      ${renderTokenSpendChart(tokenSpend)}
+      <p>${escapeHtml(tokenSpend.caveat)} Scenario assumes ${escapeHtml(Math.round(tokenSpend.improvementRate * 100))}% token reduction from applying the recommended artifacts. Cost uses ${escapeHtml(formatCurrency(tokenSpend.rates.inputPerMillion))}/1M input and ${escapeHtml(formatCurrency(tokenSpend.rates.outputPerMillion))}/1M output tokens.</p>
     </div>
     <div class="effectiveness-metrics">
       ${items
@@ -1575,6 +1742,93 @@ function renderEffectivenessDashboard(metrics) {
         .join("")}
     </div>
   </div>`;
+}
+
+function renderTokenSpendChart(tokenSpend) {
+  const daily = tokenSpend.daily.length > 0 ? tokenSpend.daily : [{ day: "No data", actual: 0, projected: 0, actualCost: { total: 0 }, projectedCost: { total: 0 } }];
+  const max = Math.max(1, ...daily.flatMap((item) => [item.actual, item.projected]));
+  const chartWidth = 720;
+  const chartHeight = 240;
+  const plotTop = 24;
+  const plotBottom = 184;
+  const slot = chartWidth / daily.length;
+  const barWidth = Math.min(28, Math.max(10, slot * 0.22));
+  const y = (value) => plotBottom - (value / max) * (plotBottom - plotTop);
+  const pointsFor = (key) =>
+    daily
+      .map((item, index) => {
+        const x = slot * index + slot / 2;
+        return `${x.toFixed(1)},${y(item[key]).toFixed(1)}`;
+      })
+      .join(" ");
+  const labels = daily
+    .map((item, index) => {
+      const x = slot * index + slot / 2;
+      return `<text x="${escapeHtml(x.toFixed(1))}" y="218">${escapeHtml(shortDay(item.day))}</text>`;
+    })
+    .join("");
+  const bars = daily
+    .map((item, index) => {
+      const x = slot * index + slot / 2;
+      const actualY = y(item.actual);
+      const projectedY = y(item.projected);
+      return `<g>
+        <rect class="actual-token-bar" x="${escapeHtml((x - barWidth - 2).toFixed(1))}" y="${escapeHtml(actualY.toFixed(1))}" width="${escapeHtml(barWidth.toFixed(1))}" height="${escapeHtml((plotBottom - actualY).toFixed(1))}"></rect>
+        <rect class="projected-token-bar" x="${escapeHtml((x + 2).toFixed(1))}" y="${escapeHtml(projectedY.toFixed(1))}" width="${escapeHtml(barWidth.toFixed(1))}" height="${escapeHtml((plotBottom - projectedY).toFixed(1))}"></rect>
+      </g>`;
+    })
+    .join("");
+  const lookbackDays = daily.length;
+  return `<figure class="token-spend-chart">
+    <figcaption>
+      <strong>${escapeHtml(lookbackDays)}-day token spend scenario</strong>
+      <span>${escapeHtml(formatCurrency(tokenSpend.actualCost.total))} actual est. vs ${escapeHtml(formatCurrency(tokenSpend.projectedCost.total))} if improvements land</span>
+    </figcaption>
+    <svg viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Estimated token spend by day compared with improved scenario">
+      <line x1="0" y1="${plotTop}" x2="${chartWidth}" y2="${plotTop}"></line>
+      <line x1="0" y1="${(plotTop + plotBottom) / 2}" x2="${chartWidth}" y2="${(plotTop + plotBottom) / 2}"></line>
+      <line x1="0" y1="${plotBottom}" x2="${chartWidth}" y2="${plotBottom}"></line>
+      ${bars}
+      <polyline class="actual-token-line" points="${escapeHtml(pointsFor("actual"))}"></polyline>
+      <polyline class="projected-token-line" points="${escapeHtml(pointsFor("projected"))}"></polyline>
+      ${labels}
+    </svg>
+    <div class="chart-legend">
+      <span><i class="actual-key"></i>Actual estimated tokens</span>
+      <span><i class="projected-key"></i>After workflow improvements</span>
+    </div>
+  </figure>`;
+}
+
+function buildEmptyTokenSpend() {
+  return {
+    actual: { input: 0, output: 0, total: 0 },
+    projected: { input: 0, output: 0, total: 0 },
+    daily: [],
+    improvementRate: 0,
+    actualCost: { total: 0 },
+    projectedCost: { total: 0 },
+    savings: { tokens: 0, cost: 0 },
+    rates: {
+      inputPerMillion: DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION,
+      outputPerMillion: DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION,
+    },
+    caveat: "No token spend signal found.",
+  };
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0));
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(Number(value) || 0);
+}
+
+function shortDay(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return value;
+  const date = new Date(`${value}T00:00:00Z`);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function renderCoaching(insights) {

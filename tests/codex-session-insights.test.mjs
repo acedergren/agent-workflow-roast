@@ -50,6 +50,7 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
       type: "function_call",
       name: "exec_command",
       content: "Tests failed because a file was missing",
+      usage: { input_tokens: 1000, output_tokens: 400 },
     },
     {
       timestamp: new Date().toISOString(),
@@ -65,6 +66,8 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
   assert.equal(stats.projects[0].name, "codex-insights");
   assert.equal(stats.tools.find((item) => item.name === "exec_command").count, 1);
   assert.ok(stats.friction.some((item) => item.name === "failed"));
+  assert.equal(stats.tokenSpend.actual.total >= 1400, true);
+  assert.equal(stats.tokenSpend.daily.length >= 1, true);
 });
 
 test("analyzeRows stores short redacted evidence snippets", () => {
@@ -122,12 +125,15 @@ test("renderers include required report sections", () => {
   assert.match(html, /Top Improvements/);
   assert.match(html, /Good \/ Bad \/ Ugly/);
   assert.match(html, /Coaching Targets/);
+  assert.match(html, /token spend scenario/);
+  assert.match(html, /API cost delta/);
   assert.match(html, /Coach&#39;s Read/);
   assert.match(html, /Custom Instructions/);
   assert.match(html, /Create These Artifacts/);
   assert.match(html, /Why this artifact/);
   assert.match(markdown, /Project Workflow Prompts/);
   assert.match(markdown, /Create These Artifacts/);
+  assert.match(markdown, /Estimated enterprise API savings/);
   assert.match(markdown, /Why this artifact/);
   assert.match(markdown, /Prompt Quality/);
   assert.match(markdown, /Codex Settings &gt; Custom instructions|Codex Settings > Custom instructions/);

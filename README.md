@@ -41,7 +41,7 @@ The command prints the generated path. Default HTML reports are written under th
 ## Report Sections
 
 - **Good / Bad / Ugly**: a coaching-first top read that names what to keep, what to fix, the useful roast, and the next best move.
-- **Coaching Targets**: prompt quality, output effectiveness, token-effectiveness proxy, planning clarity, and tool leverage with coaching.
+- **Coaching Targets**: estimated token spend over the lookback window, an improved-workflow scenario, estimated enterprise API cost delta, prompt quality, output effectiveness, planning clarity, and tool leverage with coaching.
 - **Create These Artifacts**: one prioritized queue of copy-ready prompts for scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists, each with artifact rationale.
 - **Context Snapshot**: compact project and session counts without taking over the report.
 - **Coach's Read**: human-readable synthesis after raw signals are cooked down.
