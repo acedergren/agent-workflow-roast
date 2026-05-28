@@ -41,7 +41,7 @@ The command prints the generated path. Default HTML reports are written under th
 ## Report Sections
 
 - **At a glance**: what is working, what is hindering, the quick win, and the higher-leverage workflow.
-- **Workflow Pattern Map**: top project areas and session distribution.
+- **Context Snapshot**: compact project and session counts without taking over the report.
 - **Coach's Read**: human-readable synthesis after raw signals are cooked down.
 - **Top Improvements**: practical behavior changes based on recent patterns.
 - **Effectiveness Dashboard**: prompt quality, output effectiveness, token-effectiveness proxy, planning clarity, and tool leverage with coaching.

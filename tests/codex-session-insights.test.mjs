@@ -117,7 +117,7 @@ test("renderers include required report sections", () => {
   const html = renderHtml(report);
   const markdown = renderMarkdown(report);
 
-  assert.match(html, /Workflow Pattern Map/);
+  assert.match(html, /Prompt metrics/);
   assert.match(html, /Top Improvements/);
   assert.match(html, /Effectiveness Dashboard/);
   assert.match(html, /Coach&#39;s Read/);

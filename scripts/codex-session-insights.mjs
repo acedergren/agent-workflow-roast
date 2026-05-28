@@ -524,7 +524,7 @@ export function renderHtml(report) {
   const template = readFileSync(join(ROOT_DIR, "templates", "report.html"), "utf8");
   const css = readFileSync(join(ROOT_DIR, "assets", "report.css"), "utf8");
   const stats = panelWithHead(
-    "At a glance",
+    "Context Snapshot",
     "",
     `<div class="metrics">
       ${metric("S", "Sessions", report.stats.totalRows || 0, "vs prior 7 days", "up 26")}
@@ -533,18 +533,6 @@ export function renderHtml(report) {
       ${metric("T", "Tool calls", toolTotal(report.stats.tools), "vs prior 7 days", "up 18")}
     </div>`,
     "panel at-glance",
-  );
-
-  const projectMap = panel(
-    "Workflow Pattern Map",
-    `<p class="subtle">How your work flowed across project areas</p>
-    <div class="map-actions">
-      <button class="select">Group by: Project area</button>
-      <button class="square-btn">open</button>
-    </div>`,
-    `${renderNodeMap(report.stats.projects, report.stats.totalRows)}
-    <div class="legend"><span>Primary flow</span><span>Secondary flow</span><span>Click a node to filter</span></div>`,
-    "panel map-panel",
   );
 
   const improvements = panel(
@@ -627,7 +615,6 @@ export function renderHtml(report) {
     .replaceAll("{{title}}", escapeHtml(report.title))
     .replace("{{css}}", css)
     .replace("{{stats}}", stats)
-    .replace("{{projectMap}}", projectMap)
     .replace("{{improvements}}", improvements)
     .replace("{{effectiveness}}", effectiveness)
     .replace("{{coaching}}", coaching)
@@ -1011,7 +998,14 @@ function panel(title, subtitleOrBody, body, className = "panel") {
 }
 
 function panelWithHead(title, subtitle, body, className = "panel") {
-  return `<section class="${className}"><div class="panel-head"><div><h2>${escapeHtml(title)}</h2>${subtitle}</div></div>${body}</section>`;
+  return `<section id="${slugId(title)}" class="${className}"><div class="panel-head"><div><h2>${escapeHtml(title)}</h2>${subtitle}</div></div>${body}</section>`;
+}
+
+function slugId(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function listOrEmpty(items, render) {

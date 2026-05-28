@@ -7,46 +7,40 @@
     <style>{{css}}</style>
   </head>
   <body>
-    <div class="app-frame">
-      <aside class="sidebar">
-        <div class="brand"><span class="brand-mark">C</span>Codex</div>
-        <nav class="nav">
-          <a>Sessions</a>
-          <a>Tasks</a>
-          <a class="active">Insights</a>
-          <a>Projects</a>
-          <a>Agents</a>
-          <a>AGENTS.md</a>
-          <a>Settings</a>
-        </nav>
-        <div class="profile"><span>JS</span>Jane Smith</div>
-      </aside>
+    <div class="report-shell">
       <main class="workspace">
-        <div class="browser-tab">
-          <span>/insight</span>
-        </div>
-        <header class="command-bar">
-          <div class="command-title"><span class="back">&lt;</span><strong>/insight</strong></div>
-          <div class="command-status">Generated from recent Codex sessions</div>
-          <div class="command-time">Today, 9:42 AM</div>
+        <header class="report-header">
+          <div>
+            <p class="eyebrow">/insight</p>
+            <h1>{{title}}</h1>
+            <p class="command-status">Generated from recent Codex sessions with coaching-first recommendations</p>
+          </div>
           <div class="chips">
             <span>ephemeral</span>
             <span>local only</span>
             <span>memory-aware</span>
           </div>
         </header>
-        <section class="top-grid">
-          {{stats}}
-          {{projectMap}}
-          {{improvements}}
-        </section>
+        <nav class="quick-nav" aria-label="Report sections">
+          <a href="#effectiveness-dashboard">Prompt metrics</a>
+          <a href="#coach-s-read">Coaching</a>
+          <a href="#custom-instructions">Custom instructions</a>
+          <a href="#project-workflow-prompts">Project prompts</a>
+          <a href="#friction-signals">Friction</a>
+        </nav>
         {{effectiveness}}
         {{coaching}}
         {{customInstructions}}
-        {{friction}}
-        <section class="bottom-grid">
-          {{instructions}}
+        <section class="action-grid">
           {{prompts}}
+          {{instructions}}
+        </section>
+        <section class="summary-grid">
+          {{stats}}
+          {{improvements}}
+        </section>
+        <section class="details-grid">
+          {{friction}}
           {{memory}}
         </section>
       </main>
