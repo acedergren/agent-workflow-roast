@@ -650,6 +650,12 @@ test("parseArgs supports plan options", () => {
   assert.equal(options.useAi, false);
 });
 
+test("parseArgs defaults to a rolling 7-day window", () => {
+  const options = parseArgs(["--no-open", "--no-ai"]);
+
+  assert.equal(options.days, 7);
+});
+
 test("marketplace catalog points at the installable plugin package", () => {
   const marketplace = JSON.parse(readFileSync(".agents/plugins/marketplace.json", "utf8"));
   const plugin = marketplace.plugins.find((entry) => entry.name === "agent-workflow-roast");

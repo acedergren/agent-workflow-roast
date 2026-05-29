@@ -4,7 +4,7 @@ Agent Workflow Roast is a local plugin that turns recent agent sessions into coa
 
 > A coaching report for your agent workflow, with receipts.
 
-Reports are local-first. The HTML dashboard is always written as `agent-workflow-roast.html` in the folder where `/roast` or `@roast` was triggered, unless you pass a different output directory.
+Reports are local-first. By default, each report uses a rolling 7-day window. The HTML dashboard is always written as `agent-workflow-roast.html` in the folder where `/roast` or `@roast` was triggered, unless you pass a different output directory.
 
 ## What You Get
 
@@ -35,7 +35,7 @@ codex plugin add agent-workflow-roast@agent-workflow-roast
 Then start or restart Codex and run:
 
 ```text
-/roast --days 7
+/roast
 ```
 
 Run the analyzer directly from the repository:
@@ -89,7 +89,7 @@ If no measured token data exists for a row, the report falls back to a redacted 
 ## Options
 
 ```text
---days <n>                  Lookback window in days, default 14
+--days <n>                  Lookback window in days, default 7
 --no-memory                 Exclude ~/.codex/memories/MEMORY.md
 --no-ai                     Skip codex exec synthesis and use deterministic coaching
 --export markdown|html|json Export format, default html

@@ -2,6 +2,12 @@
 
 All notable changes to Agent Workflow Roast are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Changed the default report lookback to a rolling 7-day window when `--days` is omitted.
+
 ## [0.2.0] - 2026-05-29
 
 ### Changed

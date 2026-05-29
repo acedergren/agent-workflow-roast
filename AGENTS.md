@@ -22,7 +22,7 @@ This file applies to the entire `codex-insights` repository.
 - Run a safe real-data smoke test with:
 
   ```bash
-  npm run roast -- --days 7 --no-ai --no-open --output-dir .
+  npm run roast -- --no-ai --no-open --output-dir .
   ```
 
 - Use `--no-ai` or `AGENT_WORKFLOW_ROAST_NO_AI=1` when testing against real local Codex sessions unless the user explicitly approves sending the bounded, redacted synthesis payload through `codex exec`.

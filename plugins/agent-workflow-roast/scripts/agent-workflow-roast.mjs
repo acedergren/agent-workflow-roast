@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(SCRIPT_DIR, "..");
-const DEFAULT_DAYS = 14;
+const DEFAULT_DAYS = 7;
 const TEMP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const MAX_JSONL_BYTES = 2 * 1024 * 1024;
 const MAX_SESSION_FILES = 200;
@@ -1095,7 +1095,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
         : "Handle missing memory as a normal sparse-report case.",
     ],
     prompts: [
-      `/roast --days 30`,
+      `/roast`,
       `/roast --no-memory`,
       `/roast --export markdown --output agent-workflow-roast.md`,
     ],

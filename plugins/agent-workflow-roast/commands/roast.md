@@ -1,6 +1,6 @@
 ---
 description: Generate an Agent Workflow Roast report in the current workspace
-argument-hint: [--days 30] [--no-memory] [--no-ai] [--output-dir .] [--export markdown|html|json]
+argument-hint: [--days 7] [--no-memory] [--no-ai] [--output-dir .] [--export markdown|html|json]
 allowed-tools: [Bash, Read]
 ---
 
