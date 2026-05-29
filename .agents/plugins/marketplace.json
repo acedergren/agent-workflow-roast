@@ -8,7 +8,7 @@
       "name": "codex-session-insights",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/codex-session-insights"
       },
       "policy": {
         "installation": "AVAILABLE",

@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
-import { buildReport, renderHtml } from "../scripts/codex-session-insights.mjs";
+import { buildReport, renderHtml } from "../plugins/codex-session-insights/scripts/codex-session-insights.mjs";
 
 function reportUrl() {
   const root = mkdtempSync(join(tmpdir(), "codex-insights-ui-"));

@@ -26,7 +26,7 @@ import {
   renderMarkdown,
   selectMemoryHits,
   writeReport,
-} from "../scripts/codex-session-insights.mjs";
+} from "../plugins/codex-session-insights/scripts/codex-session-insights.mjs";
 
 process.env.CODEX_INSIGHTS_NO_AI = "1";
 
@@ -512,7 +512,7 @@ test("parseArgs supports plan options", () => {
 });
 
 test("Coach's Read skill preserves the required coaching contract", () => {
-  const skill = readFileSync("skills/coachs-read/SKILL.md", "utf8");
+  const skill = readFileSync("plugins/codex-session-insights/skills/coachs-read/SKILL.md", "utf8");
 
   assert.match(skill, /precomputed Codex session metrics/);
   assert.match(skill, /Do not read raw Codex session JSONL/);
@@ -528,4 +528,14 @@ test("Coach's Read skill preserves the required coaching contract", () => {
     assert.match(skill, new RegExp(section.replace("/", "\\/")));
   }
   assert.match(skill, /Label proxy metrics honestly/);
+});
+
+test("marketplace catalog points at the installable plugin package", () => {
+  const marketplace = JSON.parse(readFileSync(".agents/plugins/marketplace.json", "utf8"));
+  const plugin = marketplace.plugins.find((entry) => entry.name === "codex-session-insights");
+
+  assert.equal(plugin?.source?.path, "./plugins/codex-session-insights");
+  assert.equal(existsSync("plugins/codex-session-insights/.codex-plugin/plugin.json"), true);
+  assert.equal(existsSync("plugins/codex-session-insights/commands/insight.md"), true);
+  assert.equal(existsSync("plugins/codex-session-insights/scripts/codex-session-insights.mjs"), true);
 });

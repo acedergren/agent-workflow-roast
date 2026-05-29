@@ -19,8 +19,14 @@ Reports are local-first. The HTML dashboard is always written as `codex-insights
 Install the plugin from the public repo marketplace:
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref v0.1.1
+codex plugin marketplace add acedergren/codex-insights --ref v0.1.2
 codex plugin add codex-session-insights@codex-insights
+```
+
+If you added the marketplace before `v0.1.2`, refresh it first:
+
+```bash
+codex plugin marketplace upgrade codex-insights
 ```
 
 Then start or restart Codex and run:
@@ -95,14 +101,15 @@ By default, the analyzer attempts qualitative synthesis with `codex exec` using 
 ## Plugin Layout
 
 ```text
-.agents/plugins/marketplace.json   Repo marketplace catalog
-.codex-plugin/plugin.json          Plugin manifest
-commands/insight.md                /insight command
-skills/insight/SKILL.md            @insight skill
-scripts/codex-session-insights.mjs Analyzer, redaction, synthesis, rendering
-templates/report.html              HTML report template
-assets/report.css                  Report styling
-playgrounds/insights-coach-playground.html
+.agents/plugins/marketplace.json                         Repo marketplace catalog
+plugins/codex-session-insights/.codex-plugin/plugin.json  Plugin manifest
+plugins/codex-session-insights/commands/insight.md        /insight command
+plugins/codex-session-insights/skills/insight/SKILL.md    @insight skill
+plugins/codex-session-insights/scripts/codex-session-insights.mjs
+                                                          Analyzer, redaction, synthesis, rendering
+plugins/codex-session-insights/templates/report.html      HTML report template
+plugins/codex-session-insights/assets/report.css          Report styling
+plugins/codex-session-insights/playgrounds/insights-coach-playground.html
 tests/codex-session-insights.test.mjs
 ```
 
@@ -131,7 +138,7 @@ npm run insight -- --days 7 --no-ai --no-open --output-dir .
 Open the coaching playground to tune the report shape and prompt strategy:
 
 ```bash
-open playgrounds/insights-coach-playground.html
+open plugins/codex-session-insights/playgrounds/insights-coach-playground.html
 ```
 
 It is a self-contained HTML file with controls for tone, outcome, evidence strictness, example friction, live preview, and a copyable analyzer prompt.

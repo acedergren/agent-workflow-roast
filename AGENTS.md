@@ -5,12 +5,14 @@ This file applies to the entire `codex-insights` repository.
 ## Project Shape
 
 - This is a local Codex plugin for session-insights reports.
-- Plugin metadata lives in `.codex-plugin/plugin.json`.
-- `/insight` command behavior lives in `commands/insight.md`.
-- `@insight` skill behavior lives in `skills/insight/SKILL.md`.
-- The main analyzer is `scripts/codex-session-insights.mjs`.
-- Report structure and styling live in `templates/report.html` and `assets/report.css`.
-- The coaching prompt playground is `playgrounds/insights-coach-playground.html`.
+- Marketplace metadata lives in `.agents/plugins/marketplace.json`.
+- The installable plugin package lives in `plugins/codex-session-insights/`.
+- Plugin metadata lives in `plugins/codex-session-insights/.codex-plugin/plugin.json`.
+- `/insight` command behavior lives in `plugins/codex-session-insights/commands/insight.md`.
+- `@insight` skill behavior lives in `plugins/codex-session-insights/skills/insight/SKILL.md`.
+- The main analyzer is `plugins/codex-session-insights/scripts/codex-session-insights.mjs`.
+- Report structure and styling live in `plugins/codex-session-insights/templates/report.html` and `plugins/codex-session-insights/assets/report.css`.
+- The coaching prompt playground is `plugins/codex-session-insights/playgrounds/insights-coach-playground.html`.
 - Tests live in `tests/codex-session-insights.test.mjs`.
 
 ## Commands
