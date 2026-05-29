@@ -1,5 +1,9 @@
 # Agent Workflow Roast
 
+<p align="center">
+  <img src="plugins/agent-workflow-roast/assets/agent-workflow-roast-icon.png" alt="Cartoon robot calmly roasting agent workflow chaos" width="180" />
+</p>
+
 Agent Workflow Roast is a local plugin that turns recent agent sessions into coaching. It helps answer: where is the work going, what keeps slowing it down, and which durable prompts, `AGENTS.md` rules, skills, agents, scripts, or checklists would make the next run better?
 
 > A coaching report for your agent workflow, with receipts.
