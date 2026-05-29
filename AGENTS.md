@@ -35,6 +35,7 @@ This file applies to the entire `codex-insights` repository.
 
 ## Implementation Guidance
 
+- Before non-trivial recommendations or edits, inspect the applicable `AGENTS.md`, current `git status`, package scripts, and relevant source/tests.
 - Keep the analyzer dependency-free unless there is a strong reason to add a package.
 - Prefer small pure functions with direct tests for parsing, redaction, grouping, synthesis parsing, rendering, and export behavior.
 - Keep JSONL ingestion bounded so mature Codex installs do not exhaust memory.
