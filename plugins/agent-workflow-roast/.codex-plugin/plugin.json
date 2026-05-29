@@ -1,13 +1,13 @@
 {
   "name": "agent-workflow-roast",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A coaching report for your agent workflow, with receipts.",
   "author": {
     "name": "Andreas Cedergren",
     "url": "https://github.com/acedergren"
   },
-  "homepage": "https://github.com/acedergren/codex-insights",
-  "repository": "https://github.com/acedergren/codex-insights",
+  "homepage": "https://github.com/acedergren/agent-workflow-roast",
+  "repository": "https://github.com/acedergren/agent-workflow-roast",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -31,7 +31,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/acedergren/codex-insights",
+    "websiteURL": "https://github.com/acedergren/agent-workflow-roast",
     "defaultPrompt": [
       "Run an Agent Workflow Roast for the last 7 days",
       "Show the agent workflow friction points from the last 30 days",

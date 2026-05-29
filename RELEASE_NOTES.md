@@ -1,38 +1,33 @@
 # Release Notes
 
-## v0.2.0
+## v0.2.1
 
-Agent Workflow Roast is now the public name, report title, and plugin surface. The report is still local-first and coaching-heavy, but the branding is cleaner: `/roast`, `@roast`, and `agent-workflow-roast.html`.
-
-Tagline: "A coaching report for your agent workflow, with receipts."
+Agent Workflow Roast now lives at its matching GitHub home: `acedergren/agent-workflow-roast`. The default report also uses the normal coaching window now: rolling 7 days when `--days` is omitted.
 
 ### Highlights
 
-- Product/plugin name: Agent Workflow Roast.
-- Report title: Agent Workflow Roast.
-- Primary command and skill: `/roast` and `@roast`.
-- Default output file: `agent-workflow-roast.html`.
-- Marketplace plugin id: `agent-workflow-roast`.
-- GitHub repo stays at `acedergren/codex-insights` for install continuity.
+- GitHub repository renamed to `acedergren/agent-workflow-roast`.
+- Plugin metadata now points at the renamed repository.
+- `/roast` with no `--days` uses a rolling 7-day window.
+- README and release docs use the new marketplace source URL.
 
 ### Install
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref v0.2.0
+codex plugin marketplace add acedergren/agent-workflow-roast --ref v0.2.1
 codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
 If you already added the old marketplace:
 
 ```bash
-codex plugin marketplace upgrade codex-insights
+codex plugin marketplace upgrade agent-workflow-roast
 codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
 ### Verification
 
 - `npm test`
-- `npm run test:ui`
 - `npm run validate:plugin`
 - `git diff --check`
-- Clean marketplace install smoke with `codex plugin add agent-workflow-roast@agent-workflow-roast`
+- No-AI smoke run with omitted `--days`, producing a 7-day report

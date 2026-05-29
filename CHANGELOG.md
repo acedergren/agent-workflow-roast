@@ -2,11 +2,12 @@
 
 All notable changes to Agent Workflow Roast are documented here.
 
-## [Unreleased]
+## [0.2.1] - 2026-05-29
 
 ### Changed
 
 - Changed the default report lookback to a rolling 7-day window when `--days` is omitted.
+- Renamed the GitHub repository to `acedergren/agent-workflow-roast` and updated public install URLs.
 
 ## [0.2.0] - 2026-05-29
 
@@ -16,7 +17,7 @@ All notable changes to Agent Workflow Roast are documented here.
 - Made `/roast` and `@roast` the primary command and skill surfaces.
 - Renamed the default HTML artifact to `agent-workflow-roast.html`.
 - Updated plugin metadata, marketplace catalog, package metadata, README, release notes, tests, and playground paths for the new brand.
-- Kept the GitHub repository at `acedergren/codex-insights` for install continuity while exposing the marketplace plugin as `agent-workflow-roast`.
+- Initially kept the GitHub repository at `acedergren/codex-insights` for install continuity while exposing the marketplace plugin as `agent-workflow-roast`.
 
 ### Compatibility
 

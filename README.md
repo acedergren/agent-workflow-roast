@@ -21,11 +21,18 @@ Reports are local-first. By default, each report uses a rolling 7-day window. Th
 Install the plugin from the public repo marketplace:
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref v0.2.0
+codex plugin marketplace add acedergren/agent-workflow-roast --ref v0.2.1
 codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
-If you added the marketplace before `v0.2.0`, refresh it first:
+If you added the marketplace before `v0.2.1`, refresh it first:
+
+```bash
+codex plugin marketplace upgrade agent-workflow-roast
+codex plugin add agent-workflow-roast@agent-workflow-roast
+```
+
+If your local marketplace is still listed as `codex-insights`, upgrade that name once and then add the plugin:
 
 ```bash
 codex plugin marketplace upgrade codex-insights
@@ -71,7 +78,7 @@ Copy buttons are included for copy-ready sections in the HTML report.
 
 ## Current Release
 
-`v0.2.0` completes the Agent Workflow Roast rebrand: `/roast`, `@roast`, `agent-workflow-roast.html`, and the report title now match the product. See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
+`v0.2.1` moves the public GitHub repository to `acedergren/agent-workflow-roast` and makes the default report window a rolling 7 days. See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
 
 ## Token Accounting
 
