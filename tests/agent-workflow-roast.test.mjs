@@ -1,9 +1,11 @@
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { parseCommandArgvJson } from "../plugins/agent-workflow-roast/scripts/agent-workflow-roast-command.mjs";
 import {
   analyzeRows,
   applyVoiceContract,
@@ -15,6 +17,7 @@ import {
   buildReport,
   buildSignals,
   cleanupOldTempReports,
+  collectSessionFiles,
   hasNearDuplicatePrompts,
   loadInputs,
   mapSignalToArtifact,
@@ -27,9 +30,9 @@ import {
   renderMarkdown,
   selectMemoryHits,
   writeReport,
-} from "../plugins/codex-session-insights/scripts/codex-session-insights.mjs";
+} from "../plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs";
 
-process.env.CODEX_INSIGHTS_NO_AI = "1";
+process.env.AGENT_WORKFLOW_ROAST_NO_AI = "1";
 
 function sectionText(html, id) {
   const match = html.match(new RegExp(`<section id="${id}"[\\s\\S]*?</section>`));
@@ -60,11 +63,37 @@ test("redactSecrets removes obvious tokens and credentials", () => {
   assert.match(redacted, /\[REDACTED\]/);
 });
 
+test("redactSecrets catches JWTs DSNs provider tokens and multiline sensitive values", () => {
+  const jwt = [
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFjZSJ9",
+    "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+  ].join(".");
+  const providerToken = ["sk", "proj", "abc1234567890abcdef"].join("-");
+  const slackToken = ["xoxb", "1234567890", "1234567890", "abcdefghijklmnopqrstuvwx"].join("-");
+  const awsKey = ["AKIA", "IOSFODNN7EXAMPLE"].join("");
+  const input = [
+    `standalone jwt ${jwt}`,
+    "DATABASE_URL=postgres://user:secret-pass@db.internal.example/app",
+    `provider tokens ${providerToken} ${slackToken} ${awsKey}`,
+    "client_secret: |\n  first-sensitive-line\n  second-sensitive-line",
+  ].join("\n");
+
+  const redacted = redactSecrets(input);
+
+  assert.equal(redacted.includes(jwt), false);
+  assert.equal(redacted.includes(providerToken), false);
+  assert.equal(redacted.includes(slackToken), false);
+  assert.equal(redacted.includes(awsKey), false);
+  assert.doesNotMatch(redacted, /secret-pass|first-sensitive-line|second-sensitive-line/);
+  assert.match(redacted, /\[REDACTED\]/);
+});
+
 test("analyzeRows groups projects, tools, and friction markers", () => {
   const rows = [
     {
       timestamp: new Date().toISOString(),
-      cwd: "/Users/acedergr/Documents/codex-insights",
+      cwd: "/Users/acedergr/Documents/agent-workflow-roast",
       type: "function_call",
       name: "exec_command",
       content: "Tests failed because a file was missing",
@@ -104,7 +133,7 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
   const stats = analyzeRows(rows, { days: 30 });
 
   assert.equal(stats.totalRows, 3);
-  assert.equal(stats.projects[0].name, "codex-insights");
+  assert.equal(stats.projects[0].name, "agent-workflow-roast");
   assert.equal(stats.tools.find((item) => item.name === "exec_command").count, 1);
   assert.ok(stats.friction.some((item) => item.name === "failed"));
   assert.equal(stats.tokenSpend.actual.total >= 3700, true);
@@ -118,10 +147,10 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
 test("buildSignals collapses raw failure markers into one source-backed signal", () => {
   const stats = analyzeRows(
     [
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "build error in package step" },
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failed action needs logs" },
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failure after rerun" },
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "auth token check without values" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "build error in package step" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "failed action needs logs" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "failure after rerun" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "auth token check without values" },
     ],
     { days: 30 },
   );
@@ -141,10 +170,10 @@ test("buildSignals collapses raw failure markers into one source-backed signal",
 test("buildRecommendations cites valid signal ids and dedupes copy prompts", () => {
   const stats = analyzeRows(
     [
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "build error in package step" },
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failed action needs logs" },
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failure after rerun" },
-      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "auth token check without values" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "build error in package step" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "failed action needs logs" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "failure after rerun" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "auth token check without values" },
     ],
     { days: 30 },
   );
@@ -155,14 +184,14 @@ test("buildRecommendations cites valid signal ids and dedupes copy prompts", () 
     {
       title: "Create failure triage",
       artifact: "script",
-      target: "codex-insights",
+      target: "agent-workflow-roast",
       rationale: "Repeated failures need one command path.",
       prompt: "Inspect this project first: read AGENTS.md, git status, package scripts, and CI logs. Create a failure triage script and run validation.",
     },
     {
       title: "Create failure triage script",
       artifact: "script",
-      target: "codex-insights",
+      target: "agent-workflow-roast",
       rationale: "Repeated failures need one command path.",
       prompt: "Inspect this project first: read AGENTS.md, git status, package scripts, and CI logs. Create a failure triage script and run validation.",
     },
@@ -183,13 +212,13 @@ test("applyVoiceContract removes AI tells while preserving commands and paths", 
   const result = applyVoiceContract({
     summary: "This pivotal workflow landscape unlocks leverage for the team.",
     nested: {
-      body: "Run npm test and inspect /Users/acedergr/Documents/codex-insights before editing.",
+      body: "Run npm test and inspect /Users/acedergr/Documents/agent-workflow-roast before editing.",
     },
   });
 
   assert.doesNotMatch(result.value.summary, /pivotal|landscape|leverage/i);
   assert.match(result.value.nested.body, /npm test/);
-  assert.match(result.value.nested.body, /\/Users\/acedergr\/Documents\/codex-insights/);
+  assert.match(result.value.nested.body, /\/Users\/acedergr\/Documents\/agent-workflow-roast/);
   assert.ok(result.review.rewrites.length >= 1);
 });
 
@@ -197,8 +226,8 @@ test("buildReport exposes signals recommendations and voice review with determin
   const report = buildReport(
     {
       rows: [
-        { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "build error in package step" },
-        { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failed action needs logs" },
+        { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "build error in package step" },
+        { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "failed action needs logs" },
       ],
       malformedRows: 0,
       memoryText: "",
@@ -217,7 +246,7 @@ test("analyzeRows stores short redacted evidence snippets", () => {
   const stats = analyzeRows([
     {
       timestamp: new Date().toISOString(),
-      cwd: "/tmp/codex-insights",
+      cwd: "/tmp/agent-workflow-roast",
       content: "base_url = https://internal.example.test\nTests failed because auth config was stale.",
     },
   ]);
@@ -230,7 +259,7 @@ test("analyzeRows parses status-style token usage text", () => {
   const stats = analyzeRows([
     {
       timestamp: new Date().toISOString(),
-      cwd: "/tmp/codex-insights",
+      cwd: "/tmp/agent-workflow-roast",
       content: "Token usage: 7.49K total (7.38K input + 105 output)",
     },
   ]);
@@ -242,19 +271,19 @@ test("analyzeRows parses status-style token usage text", () => {
 
 test("applySessionCwd carries session cwd into later rows", () => {
   const rows = applySessionCwd([
-    { type: "session_meta", payload: { cwd: "/Users/acedergr/Documents/codex-insights" } },
+    { type: "session_meta", payload: { cwd: "/Users/acedergr/Documents/agent-workflow-roast" } },
     { type: "response_item", content: "continued work" },
   ]);
 
   const stats = analyzeRows(rows, { days: 30 });
 
-  assert.equal(stats.projects[0].name, "codex-insights");
+  assert.equal(stats.projects[0].name, "agent-workflow-roast");
   assert.equal(stats.projects[0].count, 2);
 });
 
 test("selectMemoryHits returns project-related memory context", () => {
-  const memory = ["# Memory", "codex-insights should prefer ephemeral reports", "other line"].join("\n");
-  const hits = selectMemoryHits(memory, [{ name: "codex-insights", count: 2 }]);
+  const memory = ["# Memory", "agent-workflow-roast should prefer ephemeral reports", "other line"].join("\n");
+  const hits = selectMemoryHits(memory, [{ name: "agent-workflow-roast", count: 2 }]);
 
   assert.equal(hits.length, 1);
   assert.equal(hits[0].line, 2);
@@ -264,7 +293,7 @@ test("renderers include required report sections", () => {
   const stats = analyzeRows([
     {
       timestamp: new Date().toISOString(),
-      cwd: "/tmp/codex-insights",
+      cwd: "/tmp/agent-workflow-roast",
       content: "blocked retry",
     },
   ]);
@@ -273,7 +302,7 @@ test("renderers include required report sections", () => {
   const recommendations = buildRecommendations(stats, insights, signals);
   insights.recommendations = recommendations;
   const report = {
-    title: "Codex Session Insights (14 days)",
+    title: "Agent Workflow Roast",
     stats,
     memoryHits: [],
     signals,
@@ -313,14 +342,14 @@ test("renderers include required report sections", () => {
 
 test("Good Bad Ugly cards do not repeat Coach's Read text verbatim", () => {
   const stats = analyzeRows([
-    { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "blocked retry missing proof" },
+    { timestamp: new Date().toISOString(), cwd: "/tmp/agent-workflow-roast", content: "blocked retry missing proof" },
   ]);
   const signals = buildSignals(stats);
   const insights = buildDeterministicInsights(stats, []);
   const recommendations = buildRecommendations(stats, insights, signals);
   insights.recommendations = recommendations;
   const html = renderHtml({
-    title: "Codex Session Insights (14 days)",
+    title: "Agent Workflow Roast",
     stats,
     memoryHits: [],
     signals,
@@ -346,7 +375,7 @@ test("Good Bad Ugly cards do not repeat Coach's Read text verbatim", () => {
 });
 
 test("buildCoachingPrompt asks for actionable coaching schema", () => {
-  const stats = analyzeRows([{ cwd: "/tmp/codex-insights", content: "missing verification caused retry" }]);
+  const stats = analyzeRows([{ cwd: "/tmp/agent-workflow-roast", content: "missing verification caused retry" }]);
   const prompt = buildCoachingPrompt(stats, []);
 
   assert.match(prompt, /engineering coach/);
@@ -361,7 +390,7 @@ test("buildCoachingPrompt asks for actionable coaching schema", () => {
   assert.match(prompt, /roast/);
   assert.match(prompt, /customInstructions/);
   assert.match(prompt, /Codex Settings > Custom instructions/);
-  assert.match(prompt, /System prompt for Codex Insights synthesis/);
+  assert.match(prompt, /System prompt for Agent Workflow Roast synthesis/);
   assert.match(prompt, /Humanizer skill guidance/);
   assert.match(prompt, /Do not merely delete AI phrases/);
   assert.match(prompt, /rule-of-three addiction/);
@@ -369,13 +398,13 @@ test("buildCoachingPrompt asks for actionable coaching schema", () => {
 });
 
 test("buildEditorPrompt includes humanizer system guidance", () => {
-  const stats = analyzeRows([{ cwd: "/tmp/codex-insights", content: "failed retry missing verification" }]);
+  const stats = analyzeRows([{ cwd: "/tmp/agent-workflow-roast", content: "failed retry missing verification" }]);
   const signals = buildSignals(stats);
   const insights = buildDeterministicInsights(stats, []);
   const recommendations = buildRecommendations(stats, insights, signals);
   const prompt = buildEditorPrompt(insights, signals, recommendations);
 
-  assert.match(prompt, /System prompt for Codex Insights humanizer\/editor pass/);
+  assert.match(prompt, /System prompt for Agent Workflow Roast humanizer\/editor pass/);
   assert.match(prompt, /Humanizer skill guidance/);
   assert.match(prompt, /Inject a clear human voice/);
   assert.match(prompt, /Preserve exact commands, file paths, artifact types, JSON keys, and safety-critical wording/);
@@ -416,10 +445,10 @@ test("parseCodexJsonOutput extracts nested codex item text", () => {
 });
 
 test("loadInputs handles missing memory and malformed jsonl", () => {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-test-"));
-  mkdirSync(join(root, "sessions", "2026", "05"), { recursive: true });
-  writeFileSync(join(root, "history.jsonl"), '{"cwd":"/tmp/codex-insights"}\n');
-  writeFileSync(join(root, "sessions", "2026", "05", "rollout.jsonl"), '{"cwd":"/tmp/portal"}\nnope\n');
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-test-"));
+  mkdirSync(join(root, "sessions", "2026", "05", "29"), { recursive: true });
+  writeFileSync(join(root, "history.jsonl"), '{"cwd":"/tmp/agent-workflow-roast"}\n');
+  writeFileSync(join(root, "sessions", "2026", "05", "29", "rollout.jsonl"), '{"cwd":"/tmp/portal"}\nnope\n');
 
   const inputs = loadInputs(root);
 
@@ -428,8 +457,35 @@ test("loadInputs handles missing memory and malformed jsonl", () => {
   assert.equal(inputs.memoryText, "");
 });
 
+test("loadInputs only reads the expected dated session layout", () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-layout-"));
+  mkdirSync(join(root, "sessions", "2026", "05", "29"), { recursive: true });
+  mkdirSync(join(root, "sessions", "not-a-date", "deep", "tree"), { recursive: true });
+  writeFileSync(join(root, "sessions", "2026", "05", "29", "rollout.jsonl"), '{"cwd":"/tmp/dated"}\n');
+  writeFileSync(join(root, "sessions", "not-a-date", "deep", "tree", "ignored.jsonl"), '{"cwd":"/tmp/ignored"}\n');
+
+  const inputs = loadInputs(root, { days: 3650 });
+
+  assert.equal(inputs.jsonlFiles.length, 1);
+  assert.equal(inputs.jsonlFiles[0], join(root, "sessions", "2026", "05", "29", "rollout.jsonl"));
+  assert.equal(inputs.rows[0].cwd, "/tmp/dated");
+});
+
+test("collectSessionFiles caps dated session file results", () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-session-cap-"));
+  const day = join(root, "sessions", "2026", "05", "29");
+  mkdirSync(day, { recursive: true });
+  for (let index = 0; index < 250; index += 1) {
+    writeFileSync(join(day, `rollout-${String(index).padStart(3, "0")}.jsonl`), '{"cwd":"/tmp/capped"}\n');
+  }
+
+  const files = collectSessionFiles(join(root, "sessions"), { cutoffMs: 0 });
+
+  assert.equal(files.length, 200);
+});
+
 test("readJsonlTail reads only the bounded tail of large jsonl files", () => {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-tail-"));
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-tail-"));
   const path = join(root, "large.jsonl");
   writeFileSync(path, '{"i":1}\n{"i":2}\n{"i":3}\n');
 
@@ -439,39 +495,103 @@ test("readJsonlTail reads only the bounded tail of large jsonl files", () => {
   assert.doesNotMatch(text, /\{"i":1\}/);
 });
 
-test("writeReport writes default HTML to codex-insights.html in outputDir", () => {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-output-dir-"));
-  const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+test("writeReport writes default HTML to agent-workflow-roast.html in outputDir", () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-output-dir-"));
+  const inputs = { rows: [{ cwd: "/tmp/agent-workflow-roast", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
   const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
   const output = writeReport(report, { outputDir: root });
 
-  assert.equal(output, join(root, "codex-insights.html"));
+  assert.equal(output, join(root, "agent-workflow-roast.html"));
   assert.equal(existsSync(output), true);
 });
 
 test("writeReport keeps canonical HTML filename even when output path is supplied", () => {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-html-output-"));
-  const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-html-output-"));
+  const inputs = { rows: [{ cwd: "/tmp/agent-workflow-roast", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
   const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
   const output = writeReport(report, {
     exportFormat: "html",
     output: join(root, "custom-name.html"),
   });
 
-  assert.equal(output, join(root, "codex-insights.html"));
+  assert.equal(output, join(root, "agent-workflow-roast.html"));
   assert.equal(existsSync(output), true);
 });
 
+test("writeReport refuses hidden home output directories", () => {
+  const home = mkdtempSync(join(tmpdir(), "agent-workflow-roast-home-"));
+  const inputs = { rows: [{ cwd: "/tmp/agent-workflow-roast", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+  const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
+
+  assert.throws(
+    () => writeReport(report, { outputDir: join(home, ".ssh"), homeDir: home }),
+    /Refusing to write report inside hidden home directory/,
+  );
+  assert.equal(existsSync(join(home, ".ssh", "agent-workflow-roast.html")), false);
+});
+
+test("writeReport refuses hidden files in the home directory", () => {
+  const home = mkdtempSync(join(tmpdir(), "agent-workflow-roast-home-file-"));
+  const inputs = { rows: [{ cwd: "/tmp/agent-workflow-roast", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+  const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
+
+  assert.throws(
+    () =>
+      writeReport(report, {
+        exportFormat: "markdown",
+        output: join(home, ".zshrc"),
+        homeDir: home,
+      }),
+    /Refusing to write report to hidden home file/,
+  );
+});
+
+test("slash command uses argv wrapper instead of shell-interpolating raw arguments", () => {
+  const command = readFileSync("plugins/agent-workflow-roast/commands/roast.md", "utf8");
+
+  assert.doesNotMatch(command, /node\s+scripts\/agent-workflow-roast\.mjs\s+\$ARGUMENTS/);
+  assert.match(command, /AGENT_WORKFLOW_ROAST_ARGV_JSON/);
+  assert.match(command, /Never paste raw `\$ARGUMENTS` into a shell command/);
+});
+
+test("command wrapper passes parsed arguments as argv without shell interpretation", () => {
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-command-"));
+  const codexHome = join(root, "codex-home");
+  const outputDir = join(root, "reports; touch pwned");
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(join(codexHome, "history.jsonl"), '{"cwd":"/tmp/agent-workflow-roast","content":"ok"}\n');
+
+  const result = spawnSync(process.execPath, ["plugins/agent-workflow-roast/scripts/agent-workflow-roast-command.mjs"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      AGENT_WORKFLOW_ROAST_OUTPUT_DIR: outputDir,
+      AGENT_WORKFLOW_ROAST_ARGV_JSON: JSON.stringify(["--days", "1", "--no-ai", "--no-open", "--codex-home", codexHome]),
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(join(root, "pwned")), false);
+  assert.equal(existsSync(join(outputDir, "agent-workflow-roast.html")), true);
+});
+
+test("parseCommandArgvJson accepts only a JSON array of strings", () => {
+  assert.deepEqual(parseCommandArgvJson('["--days","7","--no-ai"]'), ["--days", "7", "--no-ai"]);
+  assert.throws(() => parseCommandArgvJson('{"days":7}'), /JSON array of strings/);
+  assert.throws(() => parseCommandArgvJson('["--days",7]'), /JSON array of strings/);
+});
+
 test("each run remeasures token spend from current input files", () => {
-  const codexHome = mkdtempSync(join(tmpdir(), "codex-insights-remeasure-home-"));
-  const outputDir = mkdtempSync(join(tmpdir(), "codex-insights-remeasure-out-"));
+  const codexHome = mkdtempSync(join(tmpdir(), "agent-workflow-roast-remeasure-home-"));
+  const outputDir = mkdtempSync(join(tmpdir(), "agent-workflow-roast-remeasure-out-"));
   const historyPath = join(codexHome, "history.jsonl");
   const writeHistory = (input, output) => {
     writeFileSync(
       historyPath,
       `${JSON.stringify({
         timestamp: new Date().toISOString(),
-        cwd: "/tmp/codex-insights",
+        cwd: "/tmp/agent-workflow-roast",
         content: "verification token measurement",
         usage: { input_tokens: input, output_tokens: output },
       })}\n`,
@@ -489,7 +609,7 @@ test("each run remeasures token spend from current input files", () => {
   writeHistory(4000, 1000);
   const second = runReport();
 
-  assert.equal(first.output, join(outputDir, "codex-insights.html"));
+  assert.equal(first.output, join(outputDir, "agent-workflow-roast.html"));
   assert.equal(second.output, first.output);
   assert.equal(first.report.stats.tokenSpend.actual.total, 1500);
   assert.equal(second.report.stats.tokenSpend.actual.total, 5000);
@@ -498,8 +618,8 @@ test("each run remeasures token spend from current input files", () => {
 });
 
 test("writeReport exports markdown to the requested path", () => {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-export-"));
-  const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-export-"));
+  const inputs = { rows: [{ cwd: "/tmp/agent-workflow-roast", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
   const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
   const output = writeReport(report, {
     exportFormat: "markdown",
@@ -510,7 +630,7 @@ test("writeReport exports markdown to the requested path", () => {
 });
 
 test("cleanupOldTempReports removes stale report directories", () => {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-cleanup-"));
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-cleanup-"));
   const stale = join(root, "stale");
   mkdirSync(stale);
 
@@ -530,31 +650,12 @@ test("parseArgs supports plan options", () => {
   assert.equal(options.useAi, false);
 });
 
-test("Coach's Read skill preserves the required coaching contract", () => {
-  const skill = readFileSync("plugins/codex-session-insights/skills/coachs-read/SKILL.md", "utf8");
-
-  assert.match(skill, /precomputed Codex session metrics/);
-  assert.match(skill, /Do not read raw Codex session JSONL/);
-  assert.match(skill, /Do not infer identities, private context, root causes, dates, costs, or behavioral patterns/);
-  for (const section of [
-    "Friction Coaching",
-    "Custom Instructions",
-    "Workflow Prompts",
-    "Action Prompts",
-    "Skill/Agent Suggestions",
-    "Effectiveness Metrics",
-  ]) {
-    assert.match(skill, new RegExp(section.replace("/", "\\/")));
-  }
-  assert.match(skill, /Label proxy metrics honestly/);
-});
-
 test("marketplace catalog points at the installable plugin package", () => {
   const marketplace = JSON.parse(readFileSync(".agents/plugins/marketplace.json", "utf8"));
-  const plugin = marketplace.plugins.find((entry) => entry.name === "codex-session-insights");
+  const plugin = marketplace.plugins.find((entry) => entry.name === "agent-workflow-roast");
 
-  assert.equal(plugin?.source?.path, "./plugins/codex-session-insights");
-  assert.equal(existsSync("plugins/codex-session-insights/.codex-plugin/plugin.json"), true);
-  assert.equal(existsSync("plugins/codex-session-insights/commands/insight.md"), true);
-  assert.equal(existsSync("plugins/codex-session-insights/scripts/codex-session-insights.mjs"), true);
+  assert.equal(plugin?.source?.path, "./plugins/agent-workflow-roast");
+  assert.equal(existsSync("plugins/agent-workflow-roast/.codex-plugin/plugin.json"), true);
+  assert.equal(existsSync("plugins/agent-workflow-roast/commands/roast.md"), true);
+  assert.equal(existsSync("plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs"), true);
 });

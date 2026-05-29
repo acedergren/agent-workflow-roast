@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Codex Insights Coach Playground</title>
+    <title>Agent Workflow Roast Coach Playground</title>
     <style>
       :root {
         color-scheme: dark;
@@ -420,7 +420,7 @@
 
       function buildPrompt(strict) {
         const parts = [
-          "Turn raw Codex session stats into human-readable coaching.",
+          "Turn raw agent session stats into human-readable coaching.",
           `Use a ${state.tone} coaching tone.`,
           `Optimize for ${state.outcome}.`,
           `Evidence strictness is ${strict}/5: ${strict >= 4 ? "label weak evidence and avoid overclaiming" : "allow more interpretive coaching"}.`,

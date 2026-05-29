@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** Make `/insight` produce a less repetitive, more human coaching report with source-backed signals, one canonical recommendation list, and targeted UI/chart tests.
+**Goal:** Make `/roast` produce a less repetitive, more human coaching report with source-backed signals, one canonical recommendation list, and targeted UI/chart tests.
 
-**Architecture:** Keep the analyzer dependency-light and centered in `scripts/codex-session-insights.mjs`. Add canonical `signals[]`, `recommendations[]`, and `voiceReview` fields to the report while preserving legacy insight fields for compatibility. Render the UI from the canonical recommendation list, then derive older sections from those cards.
+**Architecture:** Keep the analyzer dependency-light and centered in `plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs`. Add canonical `signals[]`, `recommendations[]`, and `voiceReview` fields to the report while preserving legacy insight fields for compatibility. Render the UI from the canonical recommendation list, then derive older sections from those cards.
 
 **Tech Stack:** Node.js ESM, `node:test`, dependency-free analyzer code, and targeted Playwright UI tests.
 
@@ -13,7 +13,7 @@
 ### Task 1: Tests for signal and recommendation contracts
 
 **Files:**
-- Modify: `tests/codex-session-insights.test.mjs`
+- Modify: `tests/agent-workflow-roast.test.mjs`
 
 - [x] Add tests proving `error`, `failed`, and `failure` collapse into one `build-action-failures` signal.
 - [x] Add tests proving every recommendation has valid `signalIds`.
@@ -24,7 +24,7 @@
 ### Task 2: Canonical signal and recommendation pipeline
 
 **Files:**
-- Modify: `scripts/codex-session-insights.mjs`
+- Modify: `plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs`
 
 - [x] Add `buildSignals(stats)` with stable signal IDs, counts, examples, projects, source kinds, confidence, and recommended artifact types.
 - [x] Add `buildRecommendations(stats, insights, signals)` so all actions cite source signals and have one primary placement.
@@ -35,7 +35,7 @@
 ### Task 3: Humanizer/editor pass
 
 **Files:**
-- Modify: `scripts/codex-session-insights.mjs`
+- Modify: `plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs`
 
 - [x] Add a voice contract that requires plainspoken coaching, specific evidence, short useful roast, and no inflated filler.
 - [x] Update synthesis prompt to use signal cards and require source IDs.
@@ -47,7 +47,7 @@
 
 **Files:**
 - Modify: `templates/report.html`
-- Modify: `scripts/codex-session-insights.mjs`
+- Modify: `plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs`
 - Modify: `assets/report.css`
 
 - [x] Replace overlapping sections with `Coach read`, `Coaching targets`, `Top actions`, `Prompt quality`, and `Evidence`.

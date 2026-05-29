@@ -1,0 +1,43 @@
+{
+  "name": "agent-workflow-roast",
+  "version": "0.2.0",
+  "description": "A coaching report for your agent workflow, with receipts.",
+  "author": {
+    "name": "Andreas Cedergren",
+    "url": "https://github.com/acedergren"
+  },
+  "homepage": "https://github.com/acedergren/codex-insights",
+  "repository": "https://github.com/acedergren/codex-insights",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "agents",
+    "workflow",
+    "roast",
+    "insights",
+    "sessions",
+    "memory",
+    "dashboard"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent Workflow Roast",
+    "shortDescription": "A coaching report for your agent workflow, with receipts",
+    "longDescription": "Analyze recent local agent sessions and optional memory summaries to surface workflow patterns, friction signals, prompt-quality metrics, practical improvements, and copy-ready guidance.",
+    "developerName": "Andreas Cedergren",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/acedergren/codex-insights",
+    "defaultPrompt": [
+      "Run an Agent Workflow Roast for the last 7 days",
+      "Show the agent workflow friction points from the last 30 days",
+      "Export Agent Workflow Roast as markdown"
+    ],
+    "brandColor": "#5C6F68",
+    "screenshots": []
+  }
+}

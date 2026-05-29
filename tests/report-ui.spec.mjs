@@ -5,10 +5,10 @@ import { pathToFileURL } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
-import { buildReport, renderHtml } from "../plugins/codex-session-insights/scripts/codex-session-insights.mjs";
+import { buildReport, renderHtml } from "../plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs";
 
 function reportUrl() {
-  const root = mkdtempSync(join(tmpdir(), "codex-insights-ui-"));
+  const root = mkdtempSync(join(tmpdir(), "agent-workflow-roast-ui-"));
   const rows = [];
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);
@@ -17,7 +17,7 @@ function reportUrl() {
     timestamp.setUTCDate(today.getUTCDate() - offset);
     rows.push({
       timestamp: timestamp.toISOString(),
-      cwd: "/tmp/codex-insights",
+      cwd: "/tmp/agent-workflow-roast",
       content: "build error, failed action, auth check, missing proof, and retry before acceptance",
       usage: {
         input_tokens: 140_000 + offset * 7_500,

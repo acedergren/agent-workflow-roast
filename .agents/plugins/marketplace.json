@@ -1,14 +1,14 @@
 {
-  "name": "codex-insights",
+  "name": "agent-workflow-roast",
   "interface": {
-    "displayName": "Codex Insights"
+    "displayName": "Agent Workflow Roast"
   },
   "plugins": [
     {
-      "name": "codex-session-insights",
+      "name": "agent-workflow-roast",
       "source": {
         "source": "local",
-        "path": "./plugins/codex-session-insights"
+        "path": "./plugins/agent-workflow-roast"
       },
       "policy": {
         "installation": "AVAILABLE",

@@ -1,21 +1,25 @@
 {
-  "name": "codex-insights",
-  "version": "0.1.4",
-  "description": "Local Codex plugin for ephemeral session insights reports.",
+  "name": "agent-workflow-roast",
+  "version": "0.2.0",
+  "description": "A coaching report for your agent workflow, with receipts.",
   "type": "module",
   "private": false,
   "bin": {
-    "codex-session-insights": "./plugins/codex-session-insights/scripts/codex-session-insights.mjs"
+    "agent-workflow-roast": "./plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs"
   },
   "scripts": {
-    "insight": "node plugins/codex-session-insights/scripts/codex-session-insights.mjs",
+    "roast": "node plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs",
+    "insight": "node plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:ui": "playwright test",
-    "validate:plugin": "python3 /Users/acedergr/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/codex-session-insights"
+    "validate:plugin": "python3 /Users/acedergr/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/agent-workflow-roast"
   },
   "keywords": [
     "codex",
     "plugin",
+    "agents",
+    "workflow",
+    "roast",
     "sessions",
     "insights"
   ],

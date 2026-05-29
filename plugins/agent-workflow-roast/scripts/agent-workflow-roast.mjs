@@ -5,15 +5,17 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  opendirSync,
   readFileSync,
   readdirSync,
   readSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -22,22 +24,45 @@ const DEFAULT_DAYS = 14;
 const TEMP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const MAX_JSONL_BYTES = 2 * 1024 * 1024;
 const MAX_SESSION_FILES = 200;
-const HTML_REPORT_FILENAME = "codex-insights.html";
+const MAX_SESSION_DIR_ENTRIES = 512;
+const HTML_REPORT_FILENAME = "agent-workflow-roast.html";
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION = 5;
 const DEFAULT_ENTERPRISE_CACHED_INPUT_COST_PER_MILLION = 0.5;
 const DEFAULT_ENTERPRISE_OUTPUT_COST_PER_MILLION = 15;
 
 const SECRET_PATTERNS = [
+  /-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g,
+  /\b(?:client_secret|access_token|refresh_token|id_token|api[_-]?key|private[_-]?key|password)\s*[:=]\s*\|[^\n]*(?:\n[ \t]+[^\n]*){1,24}/gi,
   /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi,
   /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g,
+  /\bsk-(?:proj|ant|live|test|or)-[A-Za-z0-9_-]{12,}\b/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\b(?:SG|AC)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b/g,
+  /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
   /https?:\/\/[^\s"'<>]+/gi,
+  /\b[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>]+/g,
   /\b[A-Za-z0-9_]*API[_-]?KEY[A-Za-z0-9_]*\s*[:=]\s*["']?[^"'\s,;]+/gi,
   /\b[A-Za-z0-9_]*TOKEN[A-Za-z0-9_]*\s*[:=]\s*["']?[^"'\s,;]+/gi,
+  /\b(?:client_secret|access_token|refresh_token|id_token|private[_-]?key)\s*[:=]\s*["']?[^"'\s,;]+/gi,
   /\bpassword\s*[:=]\s*["']?[^"'\s,;]+/gi,
-  /-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g,
 ];
+
+const SENSITIVE_SYSTEM_OUTPUT_DIRS = [
+  "/bin",
+  "/etc",
+  "/private/etc",
+  "/root",
+  "/sbin",
+  "/System",
+  "/usr/bin",
+  "/usr/sbin",
+  "/var/db",
+  "/private/var/db",
+  "/Library/Keychains",
+].map((path) => resolve(path));
 
 const FRICTION_MARKERS = [
   "error",
@@ -177,10 +202,14 @@ export function parseArgs(argv) {
     includeMemory: true,
     exportFormat: null,
     output: null,
-    outputDir: process.env.CODEX_INSIGHTS_OUTPUT_DIR || process.env.INIT_CWD || process.cwd(),
+    outputDir:
+      process.env.AGENT_WORKFLOW_ROAST_OUTPUT_DIR ||
+      process.env.CODEX_INSIGHTS_OUTPUT_DIR ||
+      process.env.INIT_CWD ||
+      process.cwd(),
     open: process.env.CI !== "1",
     codexHome: process.env.CODEX_HOME || join(homedir(), ".codex"),
-    useAi: process.env.CODEX_INSIGHTS_NO_AI !== "1",
+    useAi: process.env.AGENT_WORKFLOW_ROAST_NO_AI !== "1" && process.env.CODEX_INSIGHTS_NO_AI !== "1",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -263,6 +292,71 @@ export function collectFiles(root, matcher) {
     }
   }
   return files.sort();
+}
+
+function readDirEntriesCapped(root, limit = MAX_SESSION_DIR_ENTRIES) {
+  if (!existsSync(root)) return [];
+  const dir = opendirSync(root);
+  const entries = [];
+  try {
+    let entry = dir.readSync();
+    while (entry && entries.length < limit) {
+      entries.push(entry);
+      entry = dir.readSync();
+    }
+  } finally {
+    dir.closeSync();
+  }
+  return entries;
+}
+
+function isYearDir(entry) {
+  return entry.isDirectory() && /^\d{4}$/.test(entry.name);
+}
+
+function isMonthOrDayDir(entry) {
+  return entry.isDirectory() && /^\d{2}$/.test(entry.name);
+}
+
+function isJsonlFile(entry) {
+  return entry.isFile() && entry.name.endsWith(".jsonl");
+}
+
+function maybeAddSessionFile(files, path, cutoffMs) {
+  if (files.length >= MAX_SESSION_FILES) return;
+  const stat = statSync(path);
+  if (stat.mtimeMs >= cutoffMs) files.push({ path, mtimeMs: stat.mtimeMs });
+}
+
+export function collectSessionFiles(sessionRoot, options = {}) {
+  if (!existsSync(sessionRoot)) return [];
+  const cutoffMs = Number.isFinite(options.cutoffMs) ? options.cutoffMs : 0;
+  const files = [];
+  const years = readDirEntriesCapped(sessionRoot).filter(isYearDir).sort((a, b) => b.name.localeCompare(a.name));
+  for (const year of years) {
+    const yearPath = join(sessionRoot, year.name);
+    const months = readDirEntriesCapped(yearPath).filter(isMonthOrDayDir).sort((a, b) => b.name.localeCompare(a.name));
+    for (const month of months) {
+      const monthPath = join(yearPath, month.name);
+      const monthEntries = readDirEntriesCapped(monthPath).sort((a, b) => b.name.localeCompare(a.name));
+      for (const entry of monthEntries) {
+        const entryPath = join(monthPath, entry.name);
+        if (isJsonlFile(entry)) {
+          maybeAddSessionFile(files, entryPath, cutoffMs);
+        } else if (isMonthOrDayDir(entry)) {
+          const dayEntries = readDirEntriesCapped(entryPath).sort((a, b) => b.name.localeCompare(a.name));
+          for (const dayEntry of dayEntries) {
+            if (isJsonlFile(dayEntry)) maybeAddSessionFile(files, join(entryPath, dayEntry.name), cutoffMs);
+            if (files.length >= MAX_SESSION_FILES) break;
+          }
+        }
+        if (files.length >= MAX_SESSION_FILES) break;
+      }
+      if (files.length >= MAX_SESSION_FILES) break;
+    }
+    if (files.length >= MAX_SESSION_FILES) break;
+  }
+  return files.sort((a, b) => b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path)).map((item) => item.path);
 }
 
 export function extractTimestamp(row) {
@@ -951,7 +1045,7 @@ function escapeRegExp(value) {
 }
 
 export function buildDeterministicInsights(stats, memoryHits = []) {
-  const mainProject = stats.projects[0]?.name || "recent Codex work";
+  const mainProject = stats.projects[0]?.name || "recent agent work";
   const topTool = stats.tools[0]?.name || "local shell and file tools";
   const topFriction = stats.friction[0]?.name || "context drift";
   const insights = {
@@ -962,7 +1056,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
       quickWins: "Start ambiguous tasks with the expected proof artifact and stop condition.",
       ambitious: "Turn repeated corrections into durable local instructions, hooks, or command defaults.",
     },
-    narrative: `Your recent Codex workflow looks execution-heavy and verification-oriented, with most attention landing on ${mainProject}. The next move is converting repeated friction into clearer pre-flight prompts and reusable rules.`,
+    narrative: `Your recent agent workflow looks execution-heavy and verification-oriented, with most attention landing on ${mainProject}. The next move is converting repeated friction into clearer pre-flight prompts and reusable rules.`,
     roast: `You are clearly allergic to leaving work unverified, which is noble; the roast is that you sometimes make Codex rediscover the same house rules like it is a brand-new employee every morning.`,
     frictionAnalysis: stats.friction.slice(0, 4).map((item) => ({
       category: titleCase(item.name),
@@ -995,15 +1089,15 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
     ],
     instructions: [
       `When working in ${mainProject}, summarize current repo state before edits.`,
-      "Write the HTML report as codex-insights.html in the folder where the command was invoked.",
+      "Write the HTML report as agent-workflow-roast.html in the folder where the command was invoked.",
       memoryHits.length > 0
         ? "Use memory hits as weak signals and verify drift-prone facts live."
         : "Handle missing memory as a normal sparse-report case.",
     ],
     prompts: [
-      `/insight --days 30`,
-      `/insight --no-memory`,
-      `/insight --export markdown --output codex-insights.md`,
+      `/roast --days 30`,
+      `/roast --no-memory`,
+      `/roast --export markdown --output agent-workflow-roast.md`,
     ],
   };
   insights.customInstructions = buildCustomInstructionsArtifact(stats, insights, memoryHits);
@@ -1049,17 +1143,17 @@ export function buildCoachingPrompt(stats, memoryHits, signals = buildSignals(st
     memoryHits: memoryHits.slice(0, 8),
   });
   return [
-    "System prompt for Codex Insights synthesis:",
-    "You are an exacting but kind engineering coach reviewing recent Codex session patterns.",
+    "System prompt for Agent Workflow Roast synthesis:",
+    "You are an exacting but kind engineering coach reviewing recent agent session patterns.",
     "The raw counts have already been collapsed into canonical signal cards. Use those signals, not raw keyword guesses.",
-    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a Codex custom-instructions artifact, project workflow prompts, and ready-to-use prompts.",
+    "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a settings custom-instructions artifact, project workflow prompts, and ready-to-use prompts.",
     `Voice contract: ${REPORT_VOICE_CONTRACT.voice} Avoid inflated AI phrasing such as: ${REPORT_VOICE_CONTRACT.avoid.join(", ")}.`,
     HUMANIZER_PROMPT_GUIDANCE,
     "Every coaching claim and every action prompt must cite or clearly relate to the supplied signal ids. Do not repeat the same advice in multiple shapes.",
     "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
     "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
-    "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell Codex to inspect the project first and make durable, repo-grounded changes.",
-    "The actionPrompts field must contain exactly five copy-ready prompts that turn the five most effective suggestions into concrete artifacts: scripts, AGENTS.md updates, project skills, specialized agents, custom instructions for Codex Settings > Personalization, or checklists. Include a rationale explaining why that artifact type fits.",
+    "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell the agent to inspect the project first and make durable, repo-grounded changes.",
+    "The actionPrompts field must contain exactly five copy-ready prompts that turn the five most effective suggestions into concrete artifacts: scripts, AGENTS.md updates, project skills, specialized agents, custom instructions for Settings > Personalization, or checklists. Include a rationale explaining why that artifact type fits.",
     "The skillAgentSuggestions field must turn Coach's Read, the ambitious workflow, hindering patterns, build/action failures, and auth/secret verification into concrete recommended skills or agents with copy-ready creation prompts and artifact rationale.",
     "Include effectivenessMetrics for Coaching Targets. Use measured fields when present; otherwise label proxy metrics honestly. Cover prompt quality, output effectiveness, token effectiveness, planning clarity, and goal/acceptance clarity.",
     "Do not invent precise facts beyond the payload. If evidence is weak, say so plainly.",
@@ -1141,8 +1235,8 @@ export function buildCoachingPrompt(stats, memoryHits, signals = buildSignals(st
 
 export function buildEditorPrompt(insights, signals, recommendations) {
   return [
-    "System prompt for Codex Insights humanizer/editor pass:",
-    "You are editing a Codex insights report for human usefulness.",
+    "System prompt for Agent Workflow Roast humanizer/editor pass:",
+    "You are editing an Agent Workflow Roast report for human usefulness.",
     `Voice contract: ${REPORT_VOICE_CONTRACT.voice}`,
     `Avoid these AI tells: ${REPORT_VOICE_CONTRACT.avoid.join(", ")}.`,
     HUMANIZER_PROMPT_GUIDANCE,
@@ -1335,22 +1429,54 @@ export function cleanupOldTempReports(baseDir, now = Date.now()) {
   return removed;
 }
 
+function isInsidePath(child, parent) {
+  const fromParent = relative(parent, child);
+  return fromParent === "" || (!fromParent.startsWith("..") && !isAbsolute(fromParent));
+}
+
+export function validateReportOutputPath(outputPath, options = {}) {
+  const resolvedOutput = resolve(outputPath);
+  const resolvedDir = dirname(resolvedOutput);
+  const homeRoot = resolve(options.homeDir || homedir());
+  const homeRelativeDir = relative(homeRoot, resolvedDir);
+  const firstHomeSegment = homeRelativeDir.split(/[\\/]/).filter(Boolean)[0] || "";
+
+  if (isInsidePath(resolvedDir, homeRoot) && firstHomeSegment.startsWith(".")) {
+    throw new Error(`Refusing to write report inside hidden home directory: ${resolvedDir}`);
+  }
+  if (resolvedDir === homeRoot && basename(resolvedOutput).startsWith(".")) {
+    throw new Error(`Refusing to write report to hidden home file: ${resolvedOutput}`);
+  }
+  for (const sensitiveDir of SENSITIVE_SYSTEM_OUTPUT_DIRS) {
+    if (isInsidePath(resolvedDir, sensitiveDir)) {
+      throw new Error(`Refusing to write report inside sensitive system directory: ${resolvedDir}`);
+    }
+  }
+  return resolvedOutput;
+}
+
+function ensureSafeReportOutputPath(outputPath, options = {}) {
+  const resolvedOutput = validateReportOutputPath(outputPath, options);
+  mkdirSync(dirname(resolvedOutput), { recursive: true });
+  const realDir = realpathSync(dirname(resolvedOutput));
+  validateReportOutputPath(join(realDir, basename(resolvedOutput)), options);
+  return resolvedOutput;
+}
+
 export function writeReport(report, options) {
   const exportFormat = options.exportFormat || "html";
   if (exportFormat === "html") {
-    const output = resolveHtmlOutputPath(options);
-    mkdirSync(dirname(output), { recursive: true });
+    const output = ensureSafeReportOutputPath(resolveHtmlOutputPath(options), options);
     writeFileSync(output, renderHtml(report));
     return output;
   }
   if (exportFormat) {
     const extension = exportFormat === "markdown" ? "md" : exportFormat;
-    const output = resolve(options.output || `codex-insights.${extension}`);
+    const output = ensureSafeReportOutputPath(resolve(options.output || `agent-workflow-roast.${extension}`), options);
     const content =
       exportFormat === "json"
           ? `${JSON.stringify(report, null, 2)}\n`
           : renderMarkdown(report);
-    mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, content);
     return output;
   }
@@ -1386,12 +1512,7 @@ export function loadInputs(codexHome, options = {}) {
   const sessionRoot = join(codexHome, "sessions");
   const memoryPath = join(codexHome, "memories", "MEMORY.md");
   const cutoffMs = Date.now() - (options.days || DEFAULT_DAYS) * 24 * 60 * 60 * 1000;
-  const recentSessionFiles = collectFiles(sessionRoot, (path) => path.endsWith(".jsonl"))
-    .map((path) => ({ path, mtimeMs: statSync(path).mtimeMs }))
-    .filter((item) => item.mtimeMs >= cutoffMs)
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
-    .slice(0, MAX_SESSION_FILES)
-    .map((item) => item.path);
+  const recentSessionFiles = collectSessionFiles(sessionRoot, { cutoffMs });
   const jsonlFiles = [
     ...(existsSync(historyPath) ? [historyPath] : []),
     ...recentSessionFiles,
@@ -1422,7 +1543,10 @@ export function buildReport(inputs, options) {
   const stats = analyzeRows(inputs.rows, { days: options.days, malformedRows: inputs.malformedRows });
   const memoryHits = options.includeMemory ? selectMemoryHits(inputs.memoryText, stats.projects) : [];
   const signals = buildSignals(stats);
-  const useAi = options.useAi !== false && process.env.CODEX_INSIGHTS_NO_AI !== "1";
+  const useAi =
+    options.useAi !== false &&
+    process.env.AGENT_WORKFLOW_ROAST_NO_AI !== "1" &&
+    process.env.CODEX_INSIGHTS_NO_AI !== "1";
   const aiInsights = useAi ? tryCodexSynthesis(stats, memoryHits, signals) : null;
   const hasAiDraft = Boolean(aiInsights);
   let insights = normalizeInsights(aiInsights, stats, memoryHits) || buildDeterministicInsights(stats, memoryHits);
@@ -1441,7 +1565,7 @@ export function buildReport(inputs, options) {
   insights.recommendations = recommendations;
   insights.actionPrompts = recommendationsToActionPrompts(recommendations);
   return {
-    title: `Codex Session Insights (${options.days} days)`,
+    title: "Agent Workflow Roast",
     generatedAt: new Date().toISOString(),
     sourceFiles: inputs.jsonlFiles.length,
     stats,
@@ -1582,17 +1706,17 @@ function buildSkillAgentSuggestions(stats = {}, insights = {}) {
       }),
     },
     {
-      title: "Codex plugin development skill",
+      title: "Agent Workflow Roast plugin development skill",
       kind: "project skill",
-      lane: "Codex plugin development",
-      target: targetFor("codex-insights", "codex-insights"),
+      lane: "plugin development",
+      target: targetFor("agent-workflow-roast", "agent-workflow-roast"),
       why: "Makes plugin validation, report UI review, redaction safety, and real-data smoke testing repeatable.",
       rationale: "Plugin development has recurring safety and validation steps, so a project skill keeps future sessions from re-learning them.",
       prompt: buildSkillPrompt({
-        target: targetFor("codex-insights", "codex-insights"),
-        title: "Codex plugin development skill",
+        target: targetFor("agent-workflow-roast", "agent-workflow-roast"),
+        title: "Agent Workflow Roast plugin development skill",
         focus:
-          "Codex plugin development: plugin manifest, command and skill docs, analyzer tests, redaction review, report UI preview, and npm validation commands",
+          "Agent Workflow Roast plugin development: plugin manifest, command and skill docs, analyzer tests, redaction review, report UI preview, and npm validation commands",
       }),
     },
     {
@@ -1729,10 +1853,10 @@ function buildActionPrompts(stats = {}, insights = {}) {
       rationale: "Completion ambiguity belongs in a checklist because done criteria must be visible before execution starts.",
     },
     {
-      title: "Update Codex personalization",
-      suggestion: "Move broadly useful collaboration preferences into Codex custom instructions.",
+      title: "Update personalization settings",
+      suggestion: "Move broadly useful collaboration preferences into custom instructions.",
       artifact: "custom instructions",
-      rationale: "Global working preferences belong in Codex custom instructions because they should apply across repositories.",
+      rationale: "Global working preferences belong in custom instructions because they should apply across repositories.",
     },
   ];
 
@@ -1802,8 +1926,8 @@ function buildArtifactPrompt(project, item) {
   const artifact = item.artifact || "workflow artifact";
   if (artifact === "custom instructions") {
     return [
-      `Turn this suggestion into paste-ready Codex Settings > Personalization custom instructions: "${item.title}: ${item.suggestion}"`,
-      "Write concise first-person guidance that should apply across future Codex sessions, not just one repo.",
+      `Turn this suggestion into paste-ready Settings > Personalization custom instructions: "${item.title}: ${item.suggestion}"`,
+      "Write concise first-person guidance that should apply across future agent sessions, not just one repo.",
       "Preserve the user's preference for repo-grounded execution, explicit acceptance proof, scoped changes, and durable artifacts.",
       "Return only the custom-instructions text plus a one-sentence note explaining when it is too project-specific and should instead live in AGENTS.md.",
     ].join(" ");
@@ -1916,7 +2040,7 @@ function buildWorkflowPrompts(stats = {}, insights = {}) {
       target: mainProject,
       prompt: [
         "Inspect this project for repeated tasks, fragile commands, and domain-specific workflow knowledge.",
-        "Create or propose a project-related Codex skill that helps future sessions do this work reliably.",
+        "Create or propose a project-related skill that helps future sessions do this work reliably.",
         "Include when to use it, exact commands, safety checks, expected artifacts, and examples based on this repo.",
       ].join(" "),
     },
@@ -1934,8 +2058,8 @@ function buildWorkflowPrompts(stats = {}, insights = {}) {
 
 function promptsToWorkflowPrompts(prompts = []) {
   return prompts.map((prompt, index) => ({
-    title: index === 0 ? "Run insight" : "Reusable prompt",
-    target: "Codex workflow",
+    title: index === 0 ? "Run roast" : "Reusable prompt",
+    target: "agent workflow",
     prompt,
   }));
 }
@@ -2471,7 +2595,7 @@ function escapeHtml(value) {
 }
 
 function printHelp() {
-  console.log(`Usage: codex-session-insights [options]
+  console.log(`Usage: agent-workflow-roast [options]
 
 Options:
   --days <n>                 Lookback window in days (default: ${DEFAULT_DAYS})

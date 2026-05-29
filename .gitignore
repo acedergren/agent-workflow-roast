@@ -1,6 +1,10 @@
 node_modules/
 coverage/
 .DS_Store
+agent-workflow-roast-report.*
+agent-workflow-roast.html
+agent-workflow-roast.md
+agent-workflow-roast.json
 codex-insights-report.*
 codex-insights.html
 codex-insights.md

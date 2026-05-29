@@ -1,11 +1,11 @@
 ---
 name: coachs-read
-description: Produce a privacy-preserving Coach's Read from precomputed Codex session metrics. Use when the user provides or references already-computed session stats, friction counts, prompt-quality signals, token/effectiveness metrics, or insight JSON and wants coaching rather than fresh data collection.
+description: Produce a privacy-preserving Coach's Read from precomputed agent workflow metrics. Use when the user provides or references already-computed session stats, friction counts, prompt-quality signals, token/effectiveness metrics, or roast JSON and wants coaching rather than fresh data collection.
 ---
 
 # Coach's Read
 
-Use this skill when the metrics are already computed and the user wants a coaching synthesis. Do not read raw Codex session JSONL, memory files, history files, or secrets unless the user explicitly asks for a fresh `/insight` run.
+Use this skill when the metrics are already computed and the user wants a coaching synthesis. Do not read raw session JSONL, memory files, history files, or secrets unless the user explicitly asks for a fresh `/roast` run.
 
 ## Inputs
 
@@ -13,7 +13,7 @@ Work only from provided or precomputed artifacts such as:
 
 - Aggregated project, tool, friction, planning, verification, goal, token, and effectiveness metrics.
 - Redacted examples or evidence snippets.
-- Existing `codex-session-insights` JSON, markdown, or HTML report content.
+- Existing Agent Workflow Roast JSON, markdown, or HTML report content.
 
 If the input lacks evidence for a claim, say the signal is weak or unavailable. Do not infer identities, private context, root causes, dates, costs, or behavioral patterns beyond the provided metrics.
 
@@ -30,7 +30,7 @@ Produce a concise Coach's Read with these sections:
 
 1. `Summary`: one evidence-grounded paragraph about the working pattern.
 2. `Friction Coaching`: friction categories, observed counts when available, redacted evidence, likely habit to change, and a copy-ready rule.
-3. `Custom Instructions`: paste-ready first-person guidance for Codex Settings > Custom instructions.
+3. `Custom Instructions`: paste-ready first-person guidance for Settings > Custom instructions.
 4. `Workflow Prompts`: prompts for improving repo instructions, project skills, or specialist agents. Each prompt must require project inspection first.
 5. `Action Prompts`: copy-ready prompts for concrete artifacts such as scripts, AGENTS.md rules, project skills, specialist agents, custom instructions, or checklists.
 6. `Skill/Agent Suggestions`: recommended skills or agents, with target, why it helps, and a creation prompt.

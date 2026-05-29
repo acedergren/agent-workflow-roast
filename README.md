@@ -1,12 +1,14 @@
-# Codex Insights
+# Agent Workflow Roast
 
-Codex Insights is a local Codex plugin that turns recent Codex sessions into a coaching report. It helps answer: where is agent work going, what keeps slowing it down, and which durable prompts, `AGENTS.md` rules, skills, agents, scripts, or checklists would make the next run better?
+Agent Workflow Roast is a local plugin that turns recent agent sessions into coaching. It helps answer: where is the work going, what keeps slowing it down, and which durable prompts, `AGENTS.md` rules, skills, agents, scripts, or checklists would make the next run better?
 
-Reports are local-first. The HTML dashboard is always written as `codex-insights.html` in the folder where `/insight` or `@insight` was triggered, unless you pass a different output directory.
+> A coaching report for your agent workflow, with receipts.
+
+Reports are local-first. The HTML dashboard is always written as `agent-workflow-roast.html` in the folder where `/roast` or `@roast` was triggered, unless you pass a different output directory.
 
 ## What You Get
 
-- `/insight` slash command and `@insight` skill trigger.
+- `/roast` slash command and `@roast` skill trigger.
 - Local session ingestion from `~/.codex/history.jsonl` and `~/.codex/sessions/**/*.jsonl`.
 - Optional memory context from `~/.codex/memories/MEMORY.md`.
 - Secret, URL, email, and noisy-config redaction before rendering or synthesis.
@@ -19,41 +21,42 @@ Reports are local-first. The HTML dashboard is always written as `codex-insights
 Install the plugin from the public repo marketplace:
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref v0.1.4
-codex plugin add codex-session-insights@codex-insights
+codex plugin marketplace add acedergren/codex-insights --ref v0.2.0
+codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
-If you added the marketplace before `v0.1.4`, refresh it first:
+If you added the marketplace before `v0.2.0`, refresh it first:
 
 ```bash
 codex plugin marketplace upgrade codex-insights
+codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
 Then start or restart Codex and run:
 
 ```text
-/insight --days 7
+/roast --days 7
 ```
 
 Run the analyzer directly from the repository:
 
 ```bash
-npm run insight -- --no-open
+npm run roast -- --no-open
 ```
 
 Run a deterministic local-only report:
 
 ```bash
-npm run insight -- --days 30 --no-ai --no-open
+npm run roast -- --days 30 --no-ai --no-open
 ```
 
 Export a durable Markdown report:
 
 ```bash
-npm run insight -- --export markdown --output codex-insights.md
+npm run roast -- --export markdown --output agent-workflow-roast.md
 ```
 
-The command prints the generated path. Default HTML reports are written to `./codex-insights.html` and opened automatically on macOS unless `--no-open` is passed.
+The command prints the generated path. Default HTML reports are written to `./agent-workflow-roast.html` and opened automatically on macOS unless `--no-open` is passed.
 
 ## Report Sections
 
@@ -68,7 +71,7 @@ Copy buttons are included for copy-ready sections in the HTML report.
 
 ## Current Release
 
-`v0.1.4` adds Humanizer guidance to the LLM prompts that generate and edit the report, so coaching copy should read more like a specific engineer and less like generic model prose. See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
+`v0.2.0` completes the Agent Workflow Roast rebrand: `/roast`, `@roast`, `agent-workflow-roast.html`, and the report title now match the product. See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
 
 ## Token Accounting
 
@@ -91,30 +94,30 @@ If no measured token data exists for a row, the report falls back to a redacted 
 --no-ai                     Skip codex exec synthesis and use deterministic coaching
 --export markdown|html|json Export format, default html
 --output <path>             Output path for markdown/json; directory for HTML
---output-dir <path>         Directory for the default codex-insights.html artifact
+--output-dir <path>         Directory for the default agent-workflow-roast.html artifact
 --no-open                   Do not open generated HTML
 --codex-home <path>         Override ~/.codex input root
 ```
 
 ## Privacy Model
 
-Codex Insights reads local Codex history, session, and memory files. Before synthesis or rendering, it redacts obvious secrets, bearer tokens, GitHub tokens, API-key assignments, passwords, URLs, emails, private-key blocks, and noisy config-looking evidence snippets.
+Agent Workflow Roast reads local Codex history, session, and memory files. Before synthesis or rendering, it redacts obvious secrets, bearer tokens, GitHub tokens, API-key assignments, passwords, URLs, emails, private-key blocks, and noisy config-looking evidence snippets.
 
-By default, the analyzer attempts qualitative synthesis with `codex exec` using a bounded, redacted payload. Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when you want deterministic local-only coaching without sending that payload through a model call. If synthesis fails or returns unusable JSON, the deterministic report still renders.
+By default, the analyzer attempts qualitative synthesis with `codex exec` using a bounded, redacted payload. Use `--no-ai` or `AGENT_WORKFLOW_ROAST_NO_AI=1` when you want deterministic local-only coaching without sending that payload through a model call. If synthesis fails or returns unusable JSON, the deterministic report still renders.
 
 ## Plugin Layout
 
 ```text
 .agents/plugins/marketplace.json                         Repo marketplace catalog
-plugins/codex-session-insights/.codex-plugin/plugin.json  Plugin manifest
-plugins/codex-session-insights/commands/insight.md        /insight command
-plugins/codex-session-insights/skills/insight/SKILL.md    @insight skill
-plugins/codex-session-insights/scripts/codex-session-insights.mjs
+plugins/agent-workflow-roast/.codex-plugin/plugin.json  Plugin manifest
+plugins/agent-workflow-roast/commands/roast.md        /roast command
+plugins/agent-workflow-roast/skills/roast/SKILL.md    @roast skill
+plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs
                                                           Analyzer, redaction, synthesis, rendering
-plugins/codex-session-insights/templates/report.html      HTML report template
-plugins/codex-session-insights/assets/report.css          Report styling
-plugins/codex-session-insights/playgrounds/insights-coach-playground.html
-tests/codex-session-insights.test.mjs
+plugins/agent-workflow-roast/templates/report.html      HTML report template
+plugins/agent-workflow-roast/assets/report.css          Report styling
+plugins/agent-workflow-roast/playgrounds/roast-coach-playground.html
+tests/agent-workflow-roast.test.mjs
 ```
 
 ## Development
@@ -134,7 +137,7 @@ npm run validate:plugin
 Run a safe real-data smoke test without AI synthesis:
 
 ```bash
-npm run insight -- --days 7 --no-ai --no-open --output-dir .
+npm run roast -- --days 7 --no-ai --no-open --output-dir .
 ```
 
 ## Playground
@@ -142,7 +145,7 @@ npm run insight -- --days 7 --no-ai --no-open --output-dir .
 Open the coaching playground to tune the report shape and prompt strategy:
 
 ```bash
-open plugins/codex-session-insights/playgrounds/insights-coach-playground.html
+open plugins/agent-workflow-roast/playgrounds/roast-coach-playground.html
 ```
 
 It is a self-contained HTML file with controls for tone, outcome, evidence strictness, example friction, live preview, and a copyable analyzer prompt.
@@ -155,4 +158,4 @@ It is a self-contained HTML file with controls for tone, outcome, evidence stric
 
 ## Status
 
-This is an initial public implementation of a local Codex insights plugin. The current focus is personal workflow coaching: make session patterns visible, then convert repeated friction into durable guidance and copy-ready artifacts.
+This is an early public implementation of Agent Workflow Roast. The current focus is personal workflow coaching: make session patterns visible, then convert repeated friction into durable guidance and copy-ready artifacts.

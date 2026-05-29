@@ -1,33 +1,38 @@
 # Release Notes
 
-## v0.1.4
+## v0.2.0
 
-Codex Insights now bakes the Humanizer guidance into the report-generation prompts themselves. The synthesis pass and the editor/dedupe pass both ask the model to remove obvious AI tells, keep exact commands and safety wording intact, and add a more specific coaching voice instead of sanding everything down into bland correctness.
+Agent Workflow Roast is now the public name, report title, and plugin surface. The report is still local-first and coaching-heavy, but the branding is cleaner: `/roast`, `@roast`, and `agent-workflow-roast.html`.
+
+Tagline: "A coaching report for your agent workflow, with receipts."
 
 ### Highlights
 
-- Humanizer instructions are part of the LLM prompt for generating insight reports.
-- The editor pass now checks for AI-shaped phrasing while deduping recommendations.
-- Deterministic cleanup catches more common AI tells.
-- Regression tests prove the humanizer guidance remains wired into both prompt passes.
+- Product/plugin name: Agent Workflow Roast.
+- Report title: Agent Workflow Roast.
+- Primary command and skill: `/roast` and `@roast`.
+- Default output file: `agent-workflow-roast.html`.
+- Marketplace plugin id: `agent-workflow-roast`.
+- GitHub repo stays at `acedergren/codex-insights` for install continuity.
 
 ### Install
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref v0.1.4
-codex plugin add codex-session-insights@codex-insights
+codex plugin marketplace add acedergren/codex-insights --ref v0.2.0
+codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
-If you already added the marketplace:
+If you already added the old marketplace:
 
 ```bash
 codex plugin marketplace upgrade codex-insights
-codex plugin add codex-session-insights@codex-insights
+codex plugin add agent-workflow-roast@agent-workflow-roast
 ```
 
 ### Verification
 
 - `npm test`
+- `npm run test:ui`
 - `npm run validate:plugin`
 - `git diff --check`
-- Fresh AI-enabled report generation to `codex-insights.html`
+- Clean marketplace install smoke with `codex plugin add agent-workflow-roast@agent-workflow-roast`

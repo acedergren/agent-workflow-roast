@@ -4,16 +4,16 @@ This file applies to the entire `codex-insights` repository.
 
 ## Project Shape
 
-- This is a local Codex plugin for session-insights reports.
+- This repository ships the `Agent Workflow Roast` local plugin.
 - Marketplace metadata lives in `.agents/plugins/marketplace.json`.
-- The installable plugin package lives in `plugins/codex-session-insights/`.
-- Plugin metadata lives in `plugins/codex-session-insights/.codex-plugin/plugin.json`.
-- `/insight` command behavior lives in `plugins/codex-session-insights/commands/insight.md`.
-- `@insight` skill behavior lives in `plugins/codex-session-insights/skills/insight/SKILL.md`.
-- The main analyzer is `plugins/codex-session-insights/scripts/codex-session-insights.mjs`.
-- Report structure and styling live in `plugins/codex-session-insights/templates/report.html` and `plugins/codex-session-insights/assets/report.css`.
-- The coaching prompt playground is `plugins/codex-session-insights/playgrounds/insights-coach-playground.html`.
-- Tests live in `tests/codex-session-insights.test.mjs`.
+- The installable plugin package lives in `plugins/agent-workflow-roast/`.
+- Plugin metadata lives in `plugins/agent-workflow-roast/.codex-plugin/plugin.json`.
+- `/roast` command behavior lives in `plugins/agent-workflow-roast/commands/roast.md`.
+- `@roast` skill behavior lives in `plugins/agent-workflow-roast/skills/roast/SKILL.md`.
+- The main analyzer is `plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs`.
+- Report structure and styling live in `plugins/agent-workflow-roast/templates/report.html` and `plugins/agent-workflow-roast/assets/report.css`.
+- The coaching prompt playground is `plugins/agent-workflow-roast/playgrounds/roast-coach-playground.html`.
+- Tests live in `tests/agent-workflow-roast.test.mjs`.
 
 ## Commands
 
@@ -22,15 +22,15 @@ This file applies to the entire `codex-insights` repository.
 - Run a safe real-data smoke test with:
 
   ```bash
-  npm run insight -- --days 7 --no-ai --no-open --output-dir .
+  npm run roast -- --days 7 --no-ai --no-open --output-dir .
   ```
 
-- Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when testing against real local Codex sessions unless the user explicitly approves sending the bounded, redacted synthesis payload through `codex exec`.
+- Use `--no-ai` or `AGENT_WORKFLOW_ROAST_NO_AI=1` when testing against real local Codex sessions unless the user explicitly approves sending the bounded, redacted synthesis payload through `codex exec`.
 
 ## Safety Rules
 
 - Treat `~/.codex/history.jsonl`, `~/.codex/sessions/**/*.jsonl`, and `~/.codex/memories/MEMORY.md` as private local data.
-- Default HTML reports are always named `codex-insights.html` and written to the folder where the command or skill was triggered. Do not commit generated reports.
+- Default HTML reports are always named `agent-workflow-roast.html` and written to the folder where the command or skill was triggered. Do not commit generated reports.
 - Preserve redaction behavior for secrets, bearer tokens, GitHub tokens, API-key assignments, passwords, URLs, emails, private-key blocks, and noisy config-like evidence.
 - Do not add raw session dumps, memory dumps, generated reports, or temp exports to git.
 - For playground or report UI that renders editable/user-controlled text, use `textContent` or explicit escaping rather than interpolating raw text into `innerHTML`.

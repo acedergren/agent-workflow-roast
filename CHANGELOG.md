@@ -1,6 +1,29 @@
 # Changelog
 
-All notable changes to Codex Insights are documented here.
+All notable changes to Agent Workflow Roast are documented here.
+
+## [0.2.0] - 2026-05-29
+
+### Changed
+
+- Renamed the public product and report title to Agent Workflow Roast.
+- Made `/roast` and `@roast` the primary command and skill surfaces.
+- Renamed the default HTML artifact to `agent-workflow-roast.html`.
+- Updated plugin metadata, marketplace catalog, package metadata, README, release notes, tests, and playground paths for the new brand.
+- Kept the GitHub repository at `acedergren/codex-insights` for install continuity while exposing the marketplace plugin as `agent-workflow-roast`.
+
+### Compatibility
+
+- Kept `npm run insight` as a repository-local alias for `npm run roast --`.
+- Kept legacy `CODEX_INSIGHTS_*` environment variables as fallbacks while documenting the new `AGENT_WORKFLOW_ROAST_*` names.
+
+### Verification
+
+- `npm test`
+- `npm run test:ui`
+- `npm run validate:plugin`
+- `git diff --check`
+- Clean marketplace install smoke with `codex plugin add agent-workflow-roast@agent-workflow-roast`
 
 ## [0.1.4] - 2026-05-29
 
