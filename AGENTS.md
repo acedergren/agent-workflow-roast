@@ -4,7 +4,7 @@ This file applies to the entire `codex-insights` repository.
 
 ## Project Shape
 
-- This is a local Codex plugin for ephemeral session-insights reports.
+- This is a local Codex plugin for session-insights reports.
 - Plugin metadata lives in `.codex-plugin/plugin.json`.
 - `/insight` command behavior lives in `commands/insight.md`.
 - `@insight` skill behavior lives in `skills/insight/SKILL.md`.
@@ -20,7 +20,7 @@ This file applies to the entire `codex-insights` repository.
 - Run a safe real-data smoke test with:
 
   ```bash
-  npm run insight -- --days 7 --no-ai --no-open --export html --output /private/tmp/codex-insights.html
+  npm run insight -- --days 7 --no-ai --no-open --output-dir .
   ```
 
 - Use `--no-ai` or `CODEX_INSIGHTS_NO_AI=1` when testing against real local Codex sessions unless the user explicitly approves sending the bounded, redacted synthesis payload through `codex exec`.
@@ -28,7 +28,7 @@ This file applies to the entire `codex-insights` repository.
 ## Safety Rules
 
 - Treat `~/.codex/history.jsonl`, `~/.codex/sessions/**/*.jsonl`, and `~/.codex/memories/MEMORY.md` as private local data.
-- Keep reports ephemeral by default. Durable files should only be written through explicit `--export`.
+- Default HTML reports are always named `codex-insights.html` and written to the folder where the command or skill was triggered. Do not commit generated reports.
 - Preserve redaction behavior for secrets, bearer tokens, GitHub tokens, API-key assignments, passwords, URLs, emails, private-key blocks, and noisy config-like evidence.
 - Do not add raw session dumps, memory dumps, generated reports, or temp exports to git.
 - For playground or report UI that renders editable/user-controlled text, use `textContent` or explicit escaping rather than interpolating raw text into `innerHTML`.

@@ -2,7 +2,7 @@
 
 Codex Insights is a local Codex plugin that turns recent Codex sessions into a coaching report. It helps answer: where is agent work going, what keeps slowing it down, and which durable prompts, `AGENTS.md` rules, skills, agents, scripts, or checklists would make the next run better?
 
-Reports are local-first and temporary by default. Durable files are written only when you explicitly export them.
+Reports are local-first. The HTML dashboard is always written as `codex-insights.html` in the folder where `/insight` or `@insight` was triggered, unless you pass a different output directory.
 
 ## What You Get
 
@@ -44,21 +44,19 @@ npm run insight -- --days 30 --no-ai --no-open
 Export a durable Markdown report:
 
 ```bash
-npm run insight -- --export markdown --output codex-insights-report.md
+npm run insight -- --export markdown --output codex-insights.md
 ```
 
-The command prints the generated path. Default HTML reports are written under the OS temp directory and opened automatically on macOS unless `--no-open` is passed.
+The command prints the generated path. Default HTML reports are written to `./codex-insights.html` and opened automatically on macOS unless `--no-open` is passed.
 
 ## Report Sections
 
 - **Good / Bad / Ugly**: what to keep doing, what is costing loops, the useful roast, and the next best move.
-- **Coaching Targets**: token spend over the lookback window, improved-workflow scenario, estimated enterprise API cost delta, prompt quality, output effectiveness, planning clarity, and tool leverage.
-- **Custom Instructions**: paste-ready text for Codex Settings > Custom instructions.
-- **Create These Artifacts**: prioritized copy-ready prompts for scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists.
+- **Coaching Targets**: token spend over the lookback window, improved-workflow scenario, estimated enterprise API cost delta, prompt quality, output effectiveness, planning clarity, and tool follow-through.
 - **Coach's Read**: human-readable synthesis after raw signals are cooked down.
-- **Project Workflow Prompts**: prompts to run inside projects to improve `AGENTS.md`, create project skills, or define specialist agents.
-- **Friction Signals**: repeated markers such as auth drift, missing proof, failed checks, retries, or timeouts.
-- **Context Snapshot** and **Top Improvements**: compact supporting evidence without taking over the report.
+- **Top Actions**: one canonical list of copy-ready prompts for scripts, `AGENTS.md` rules, project skills, specialist agents, custom instructions, or checklists.
+- **Prompt Quality**: a concrete score, diagnosis, and better prompt pattern.
+- **Evidence**: source-backed signal cards with counts, confidence, and rules.
 
 Copy buttons are included for copy-ready sections in the HTML report.
 
@@ -81,8 +79,9 @@ If no measured token data exists for a row, the report falls back to a redacted 
 --days <n>                  Lookback window in days, default 14
 --no-memory                 Exclude ~/.codex/memories/MEMORY.md
 --no-ai                     Skip codex exec synthesis and use deterministic coaching
---export markdown|html|json Persist a report instead of temp-only HTML
---output <path>             Output path for --export
+--export markdown|html|json Export format, default html
+--output <path>             Output path for markdown/json; directory for HTML
+--output-dir <path>         Directory for the default codex-insights.html artifact
 --no-open                   Do not open generated HTML
 --codex-home <path>         Override ~/.codex input root
 ```
@@ -124,7 +123,7 @@ npm run validate:plugin
 Run a safe real-data smoke test without AI synthesis:
 
 ```bash
-npm run insight -- --days 7 --no-ai --no-open --export html --output /private/tmp/codex-insights.html
+npm run insight -- --days 7 --no-ai --no-open --output-dir .
 ```
 
 ## Playground

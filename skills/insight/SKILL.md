@@ -1,6 +1,6 @@
 ---
 name: insight
-description: Generate an ephemeral Codex session insights dashboard from recent session history and optional memory context. Use when the user invokes @insight or asks for Codex workflow/session insights.
+description: Generate a Codex session insights dashboard from recent session history and optional memory context. Use when the user invokes @insight or asks for Codex workflow/session insights.
 ---
 
 # Codex Session Insights
@@ -9,21 +9,21 @@ Use this skill when the user asks for `@insight`, `/insight`, or an operational 
 
 ## Workflow
 
-1. From the plugin root, run:
+1. Capture the folder where the skill was triggered before changing directories. From the plugin root, run:
 
    ```bash
-   node scripts/codex-session-insights.mjs
+   CODEX_INSIGHTS_OUTPUT_DIR="$TRIGGER_DIR" node scripts/codex-session-insights.mjs
    ```
 
 2. Pass through user options when supplied:
 
    ```bash
-   node scripts/codex-session-insights.mjs --days 30 --no-memory
-   node scripts/codex-session-insights.mjs --no-ai
-   node scripts/codex-session-insights.mjs --export markdown
+   CODEX_INSIGHTS_OUTPUT_DIR="$TRIGGER_DIR" node scripts/codex-session-insights.mjs --days 30 --no-memory
+   CODEX_INSIGHTS_OUTPUT_DIR="$TRIGGER_DIR" node scripts/codex-session-insights.mjs --no-ai
+   CODEX_INSIGHTS_OUTPUT_DIR="$TRIGGER_DIR" node scripts/codex-session-insights.mjs --export markdown
    ```
 
-3. Share the generated report path. Default reports are ephemeral temp files; durable artifacts are written only when `--export` is used.
+3. Share the generated report path. The HTML report is always named `codex-insights.html` and written to the folder where the skill was triggered, unless the user explicitly supplies an output directory.
 
 ## Notes
 

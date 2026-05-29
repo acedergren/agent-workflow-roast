@@ -12,8 +12,8 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -22,6 +22,7 @@ const DEFAULT_DAYS = 14;
 const TEMP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const MAX_JSONL_BYTES = 2 * 1024 * 1024;
 const MAX_SESSION_FILES = 200;
+const HTML_REPORT_FILENAME = "codex-insights.html";
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_ENTERPRISE_INPUT_COST_PER_MILLION = 5;
 const DEFAULT_ENTERPRISE_CACHED_INPUT_COST_PER_MILLION = 0.5;
@@ -144,6 +145,7 @@ export function parseArgs(argv) {
     includeMemory: true,
     exportFormat: null,
     output: null,
+    outputDir: process.env.CODEX_INSIGHTS_OUTPUT_DIR || process.env.INIT_CWD || process.cwd(),
     open: process.env.CI !== "1",
     codexHome: process.env.CODEX_HOME || join(homedir(), ".codex"),
     useAi: process.env.CODEX_INSIGHTS_NO_AI !== "1",
@@ -165,6 +167,10 @@ export function parseArgs(argv) {
       options.output = argv[++index];
     } else if (arg.startsWith("--output=")) {
       options.output = arg.split("=", 2)[1];
+    } else if (arg === "--output-dir") {
+      options.outputDir = argv[++index];
+    } else if (arg.startsWith("--output-dir=")) {
+      options.outputDir = arg.split("=", 2)[1];
     } else if (arg === "--no-open") {
       options.open = false;
     } else if (arg === "--no-ai") {
@@ -957,7 +963,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
     ],
     instructions: [
       `When working in ${mainProject}, summarize current repo state before edits.`,
-      "Prefer ephemeral reports unless the user explicitly asks for export or durable docs.",
+      "Write the HTML report as codex-insights.html in the folder where the command was invoked.",
       memoryHits.length > 0
         ? "Use memory hits as weak signals and verify drift-prone facts live."
         : "Handle missing memory as a normal sparse-report case.",
@@ -965,7 +971,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
     prompts: [
       `/insight --days 30`,
       `/insight --no-memory`,
-      `/insight --export markdown --output codex-insights-report.md`,
+      `/insight --export markdown --output codex-insights.md`,
     ],
   };
   insights.customInstructions = buildCustomInstructionsArtifact(stats, insights, memoryHits);
@@ -1294,28 +1300,34 @@ export function cleanupOldTempReports(baseDir, now = Date.now()) {
 }
 
 export function writeReport(report, options) {
-  const exportFormat = options.exportFormat;
+  const exportFormat = options.exportFormat || "html";
+  if (exportFormat === "html") {
+    const output = resolveHtmlOutputPath(options);
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, renderHtml(report));
+    return output;
+  }
   if (exportFormat) {
     const extension = exportFormat === "markdown" ? "md" : exportFormat;
-    const output = resolve(options.output || `codex-insights-report.${extension}`);
+    const output = resolve(options.output || `codex-insights.${extension}`);
     const content =
-      exportFormat === "html"
-        ? renderHtml(report)
-        : exportFormat === "json"
+      exportFormat === "json"
           ? `${JSON.stringify(report, null, 2)}\n`
           : renderMarkdown(report);
+    mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, content);
     return output;
   }
+}
 
-  const baseDir = join(tmpdir(), "codex-session-insights");
-  mkdirSync(baseDir, { recursive: true });
-  cleanupOldTempReports(baseDir);
-  const runDir = join(baseDir, new Date().toISOString().replace(/[:.]/g, "-"));
-  mkdirSync(runDir, { recursive: true });
-  const output = join(runDir, "report.html");
-  writeFileSync(output, renderHtml(report));
-  return output;
+function resolveHtmlOutputPath(options = {}) {
+  const outputRoot = options.output ? htmlOutputRootFromOption(options.output) : options.outputDir;
+  return join(resolve(outputRoot || process.cwd()), HTML_REPORT_FILENAME);
+}
+
+function htmlOutputRootFromOption(output) {
+  const resolved = resolve(output);
+  return extname(resolved) ? dirname(resolved) : resolved;
 }
 
 export function readJsonlTail(path, maxBytes = MAX_JSONL_BYTES) {
@@ -2400,8 +2412,9 @@ function printHelp() {
 Options:
   --days <n>                 Lookback window in days (default: ${DEFAULT_DAYS})
   --no-memory                Exclude ~/.codex/memories/MEMORY.md
-  --export markdown|html|json Persist a report instead of temp-only HTML
-  --output <path>            Output path for --export
+  --export markdown|html|json Export format, default html
+  --output <path>            Output path for markdown/json; directory for HTML
+  --output-dir <path>        Directory for the default HTML artifact
   --no-open                  Do not open the generated HTML
   --no-ai                    Skip codex exec synthesis and use deterministic coaching
   --codex-home <path>        Override ~/.codex input root
@@ -2417,7 +2430,7 @@ async function main() {
   const inputs = loadInputs(options.codexHome, options);
   const report = buildReport(inputs, options);
   const output = writeReport(report, options);
-  if (!options.exportFormat && options.open && process.platform === "darwin") {
+  if ((!options.exportFormat || options.exportFormat === "html") && options.open && process.platform === "darwin") {
     spawnSync("open", [output], { stdio: "ignore" });
   }
   console.log(output);

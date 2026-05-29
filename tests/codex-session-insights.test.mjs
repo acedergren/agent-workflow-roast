@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -372,10 +372,33 @@ test("readJsonlTail reads only the bounded tail of large jsonl files", () => {
   assert.doesNotMatch(text, /\{"i":1\}/);
 });
 
-test("writeReport exports durable markdown only when requested", () => {
+test("writeReport writes default HTML to codex-insights.html in outputDir", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-insights-output-dir-"));
+  const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+  const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
+  const output = writeReport(report, { outputDir: root });
+
+  assert.equal(output, join(root, "codex-insights.html"));
+  assert.equal(existsSync(output), true);
+});
+
+test("writeReport keeps canonical HTML filename even when output path is supplied", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-insights-html-output-"));
+  const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
+  const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
+  const output = writeReport(report, {
+    exportFormat: "html",
+    output: join(root, "custom-name.html"),
+  });
+
+  assert.equal(output, join(root, "codex-insights.html"));
+  assert.equal(existsSync(output), true);
+});
+
+test("writeReport exports markdown to the requested path", () => {
   const root = mkdtempSync(join(tmpdir(), "codex-insights-export-"));
   const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
-  const report = buildReport(inputs, { days: 7, includeMemory: false });
+  const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
   const output = writeReport(report, {
     exportFormat: "markdown",
     output: join(root, "report.md"),
@@ -395,11 +418,12 @@ test("cleanupOldTempReports removes stale report directories", () => {
 });
 
 test("parseArgs supports plan options", () => {
-  const options = parseArgs(["--days", "30", "--no-memory", "--export", "json", "--no-open", "--no-ai"]);
+  const options = parseArgs(["--days", "30", "--no-memory", "--export", "json", "--output-dir", "/tmp/reports", "--no-open", "--no-ai"]);
 
   assert.equal(options.days, 30);
   assert.equal(options.includeMemory, false);
   assert.equal(options.exportFormat, "json");
+  assert.equal(options.outputDir, "/tmp/reports");
   assert.equal(options.open, false);
   assert.equal(options.useAi, false);
 });
