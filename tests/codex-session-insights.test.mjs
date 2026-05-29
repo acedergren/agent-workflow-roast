@@ -443,6 +443,41 @@ test("writeReport keeps canonical HTML filename even when output path is supplie
   assert.equal(existsSync(output), true);
 });
 
+test("each run remeasures token spend from current input files", () => {
+  const codexHome = mkdtempSync(join(tmpdir(), "codex-insights-remeasure-home-"));
+  const outputDir = mkdtempSync(join(tmpdir(), "codex-insights-remeasure-out-"));
+  const historyPath = join(codexHome, "history.jsonl");
+  const writeHistory = (input, output) => {
+    writeFileSync(
+      historyPath,
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        cwd: "/tmp/codex-insights",
+        content: "verification token measurement",
+        usage: { input_tokens: input, output_tokens: output },
+      })}\n`,
+    );
+  };
+  const runReport = () => {
+    const inputs = loadInputs(codexHome, { days: 7 });
+    const report = buildReport(inputs, { days: 7, includeMemory: false, useAi: false });
+    const output = writeReport(report, { outputDir });
+    return { output, report, html: readFileSync(output, "utf8") };
+  };
+
+  writeHistory(1000, 500);
+  const first = runReport();
+  writeHistory(4000, 1000);
+  const second = runReport();
+
+  assert.equal(first.output, join(outputDir, "codex-insights.html"));
+  assert.equal(second.output, first.output);
+  assert.equal(first.report.stats.tokenSpend.actual.total, 1500);
+  assert.equal(second.report.stats.tokenSpend.actual.total, 5000);
+  assert.match(first.html, /1,500/);
+  assert.match(second.html, /5,000/);
+});
+
 test("writeReport exports markdown to the requested path", () => {
   const root = mkdtempSync(join(tmpdir(), "codex-insights-export-"));
   const inputs = { rows: [{ cwd: "/tmp/codex-insights", content: "ok" }], malformedRows: 0, memoryText: "", jsonlFiles: [] };
