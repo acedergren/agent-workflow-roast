@@ -30,6 +30,19 @@ import {
 
 process.env.CODEX_INSIGHTS_NO_AI = "1";
 
+function sectionText(html, id) {
+  const match = html.match(new RegExp(`<section id="${id}"[\\s\\S]*?</section>`));
+  return (match?.[0] || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 test("parseJsonl keeps valid rows and reports malformed lines", () => {
   const result = parseJsonl('{"cwd":"/tmp/a"}\nnope\n{"cwd":"/tmp/b"}\n');
 
@@ -274,6 +287,7 @@ test("renderers include required report sections", () => {
   assert.match(html, /Coaching targets/);
   assert.doesNotMatch(html, /Top Improvements/);
   assert.match(html, /Good \/ Bad \/ Ugly/);
+  assert.match(html, /Do first/);
   assert.match(html, /Coaching Targets/);
   assert.match(html, /token spend scenario/);
   assert.match(html, /API cost delta/);
@@ -294,6 +308,40 @@ test("renderers include required report sections", () => {
   assert.match(markdown, /Estimated enterprise API savings/);
   assert.match(markdown, /Why this artifact/);
   assert.match(markdown, /Prompt Quality/);
+});
+
+test("Good Bad Ugly cards do not repeat Coach's Read text verbatim", () => {
+  const stats = analyzeRows([
+    { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "blocked retry missing proof" },
+  ]);
+  const signals = buildSignals(stats);
+  const insights = buildDeterministicInsights(stats, []);
+  const recommendations = buildRecommendations(stats, insights, signals);
+  insights.recommendations = recommendations;
+  const html = renderHtml({
+    title: "Codex Session Insights (14 days)",
+    stats,
+    memoryHits: [],
+    signals,
+    recommendations,
+    voiceReview: applyVoiceContract(insights).review,
+    insights,
+  });
+  const goodBadUgly = sectionText(html, "good-bad-ugly");
+  const coachRead = sectionText(html, "coach-s-read");
+
+  assert.equal(coachRead.includes(insights.roast), true);
+  for (const repeated of [
+    insights.atAGlance.working,
+    insights.atAGlance.hindering,
+    insights.atAGlance.quickWins,
+    insights.atAGlance.ambitious,
+    insights.roast,
+  ]) {
+    assert.equal(goodBadUgly.includes(repeated), false, repeated);
+  }
+  assert.match(goodBadUgly, /Roast stays valid|repeat archaeology/);
+  assert.equal(coachRead.includes("Roast stays valid"), false);
 });
 
 test("buildCoachingPrompt asks for actionable coaching schema", () => {

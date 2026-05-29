@@ -1181,7 +1181,7 @@ export function renderHtml(report) {
   const coachingHeader = panel(
     "Good / Bad / Ugly",
     '<p class="subtle">The blunt read before the details</p>',
-    renderGoodBadUgly(report.insights),
+    renderGoodBadUgly(report),
     "panel coaching-strip-panel",
   );
 
@@ -2066,18 +2066,46 @@ function renderNodeMap(projects, totalRows) {
   </div>`;
 }
 
-function renderGoodBadUgly(insights) {
-  const glance = insights.atAGlance || {};
+function renderGoodBadUgly(report) {
+  const insights = report.insights || {};
+  const stats = report.stats || {};
+  const signals = report.signals || [];
+  const actions = report.recommendations || insights.recommendations || buildArtifactQueue(stats, insights);
+  const topSignal = signals[0];
+  const secondSignal = signals[1];
+  const firstAction = actions[0] || buildArtifactQueue(stats, insights)[0] || {};
   return `<div class="gbu-grid">
-    ${coachSignal("Good", glance.working || "Recurring project patterns are visible enough to improve.", "Keep")}
-    ${coachSignal("Bad", glance.hindering || "Reactive loops and missing proof are costing time.", "Fix")}
-    ${coachSignal(
-      "Ugly",
-      insights.roast || "The workflow is productive, but it keeps making future-you pay interest on unwritten rules.",
-      "Roast",
-    )}
-    ${coachSignal("Next best move", (buildArtifactQueue({}, insights)[0] || {}).title || "Create one durable workflow artifact.", "Do first")}
+    ${coachSignal("Good", gbuGood(stats), "Keep")}
+    ${coachSignal("Bad", gbuBad(topSignal), "Fix")}
+    ${coachSignal("Ugly", gbuUgly(insights, secondSignal || topSignal), "Roast")}
+    ${coachSignal("Do first", gbuDoFirst(firstAction), "Do first")}
   </div>`;
+}
+
+function gbuGood(stats = {}) {
+  const proof = stats.verificationMentions || 0;
+  const projects = stats.projects?.length || 0;
+  if (proof > 0) return `Proof-seeking is already in the workflow: ${formatNumber(proof)} verification mentions across ${formatNumber(projects)} project areas. Keep that instinct.`;
+  return `The useful pattern is visible: ${formatNumber(projects)} project areas produced enough signal to coach from. Keep grounding work in real repo evidence.`;
+}
+
+function gbuBad(signal) {
+  if (!signal) return "The weak spot is not one dramatic failure; it is fuzzy acceptance criteria showing up before the work has a clean finish line.";
+  return `The ${signal.label.toLowerCase()} lane is the loudest drag: ${formatNumber(signal.count)} hits. Treat it as one recurring workflow problem, not a fresh mystery every time.`;
+}
+
+function gbuUgly(insights = {}, signal) {
+  const signalLabel = signal?.label ? ` The ${signal.label.toLowerCase()} lane keeps asking for a laminated checklist.` : "";
+  if (insights.roast) {
+    return `Roast stays valid: the workflow is productive, but future-you is still paying interest on unwritten rules.${signalLabel}`;
+  }
+  return `The ugly bit is not effort; it is repeat archaeology.${signalLabel}`;
+}
+
+function gbuDoFirst(action = {}) {
+  if (!action.title) return "Write one small rule or script before the next rerun, then use it immediately.";
+  const artifact = action.artifact || "workflow aid";
+  return `${action.title}. Make the ${artifact} small, repo-grounded, and easy to reuse before the next loop starts.`;
 }
 
 function coachSignal(label, body, badge) {
