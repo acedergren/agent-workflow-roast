@@ -62,8 +62,33 @@ const NOISY_EXAMPLE_PATTERNS = [
 const REPORT_VOICE_CONTRACT = {
   voice: "Plainspoken engineering coach: specific, warm, lightly sharp, and allergic to filler.",
   preserve: ["commands", "file paths", "JSON keys", "artifact names", "safety rules"],
-  avoid: ["pivotal", "landscape", "leverage", "delve", "showcase", "testament to", "crucial"],
+  avoid: [
+    "pivotal",
+    "landscape",
+    "leverage",
+    "delve",
+    "showcase",
+    "testament to",
+    "crucial",
+    "underscores",
+    "foster",
+    "garner",
+    "intricate",
+    "tapestry",
+    "serves as",
+    "stands as",
+  ],
 };
+
+const HUMANIZER_PROMPT_GUIDANCE = [
+  "Humanizer skill guidance:",
+  "- Before writing, identify the 3-5 dominant AI-writing patterns in the draft or payload. Fix those first; do not try to polish everything equally.",
+  "- Do not merely delete AI phrases. Inject a clear human voice: opinionated, specific, a little witty, and grounded in the supplied evidence.",
+  "- Context level: technical coaching report, about 40-60% humanized. Keep clarity, exact commands, file paths, JSON keys, artifact names, and safety wording intact.",
+  "- Avoid significance inflation, promotional language, vague attributions, copula avoidance, negative parallelisms, paragraph-starting However, em dash overuse, and rule-of-three addiction.",
+  "- Prefer concrete facts, simple is/are/has phrasing, varied sentence rhythm, and short coaching lines that sound like a real engineer wrote them.",
+  "- Keep the roast useful and specific. Sharp is good; generic snark is not.",
+].join("\n");
 
 const VOICE_REWRITES = [
   [/This pivotal workflow landscape unlocks leverage for the team\./gi, "This workflow gives the team a clearer way to act."],
@@ -77,6 +102,13 @@ const VOICE_REWRITES = [
   [/\bserves as a testament to\b/gi, "shows"],
   [/\btestament to\b/gi, "proof of"],
   [/\bcrucial\b/gi, "important"],
+  [/\bunderscores\b/gi, "shows"],
+  [/\bfoster\b/gi, "build"],
+  [/\bgarner\b/gi, "get"],
+  [/\bintricate\b/gi, "detailed"],
+  [/\btapestry\b/gi, "mix"],
+  [/\bserves as\b/gi, "is"],
+  [/\bstands as\b/gi, "is"],
 ];
 
 const CANONICAL_SIGNAL_DEFINITIONS = [
@@ -1017,10 +1049,12 @@ export function buildCoachingPrompt(stats, memoryHits, signals = buildSignals(st
     memoryHits: memoryHits.slice(0, 8),
   });
   return [
+    "System prompt for Codex Insights synthesis:",
     "You are an exacting but kind engineering coach reviewing recent Codex session patterns.",
     "The raw counts have already been collapsed into canonical signal cards. Use those signals, not raw keyword guesses.",
     "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a Codex custom-instructions artifact, project workflow prompts, and ready-to-use prompts.",
     `Voice contract: ${REPORT_VOICE_CONTRACT.voice} Avoid inflated AI phrasing such as: ${REPORT_VOICE_CONTRACT.avoid.join(", ")}.`,
+    HUMANIZER_PROMPT_GUIDANCE,
     "Every coaching claim and every action prompt must cite or clearly relate to the supplied signal ids. Do not repeat the same advice in multiple shapes.",
     "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
     "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
@@ -1105,11 +1139,13 @@ export function buildCoachingPrompt(stats, memoryHits, signals = buildSignals(st
   ].join("\n\n");
 }
 
-function buildEditorPrompt(insights, signals, recommendations) {
+export function buildEditorPrompt(insights, signals, recommendations) {
   return [
+    "System prompt for Codex Insights humanizer/editor pass:",
     "You are editing a Codex insights report for human usefulness.",
     `Voice contract: ${REPORT_VOICE_CONTRACT.voice}`,
     `Avoid these AI tells: ${REPORT_VOICE_CONTRACT.avoid.join(", ")}.`,
+    HUMANIZER_PROMPT_GUIDANCE,
     "Rewrite all prose to be plain, specific, concise, and lightly witty where useful.",
     "Remove repeated advice. Preserve exact commands, file paths, artifact types, JSON keys, and safety-critical wording.",
     "Every action prompt must keep signalIds. If two prompts say the same thing, keep the sharper one.",

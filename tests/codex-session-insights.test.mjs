@@ -10,6 +10,7 @@ import {
   applySessionCwd,
   buildRecommendations,
   buildCoachingPrompt,
+  buildEditorPrompt,
   buildDeterministicInsights,
   buildReport,
   buildSignals,
@@ -360,6 +361,24 @@ test("buildCoachingPrompt asks for actionable coaching schema", () => {
   assert.match(prompt, /roast/);
   assert.match(prompt, /customInstructions/);
   assert.match(prompt, /Codex Settings > Custom instructions/);
+  assert.match(prompt, /System prompt for Codex Insights synthesis/);
+  assert.match(prompt, /Humanizer skill guidance/);
+  assert.match(prompt, /Do not merely delete AI phrases/);
+  assert.match(prompt, /rule-of-three addiction/);
+  assert.match(prompt, /technical coaching report/);
+});
+
+test("buildEditorPrompt includes humanizer system guidance", () => {
+  const stats = analyzeRows([{ cwd: "/tmp/codex-insights", content: "failed retry missing verification" }]);
+  const signals = buildSignals(stats);
+  const insights = buildDeterministicInsights(stats, []);
+  const recommendations = buildRecommendations(stats, insights, signals);
+  const prompt = buildEditorPrompt(insights, signals, recommendations);
+
+  assert.match(prompt, /System prompt for Codex Insights humanizer\/editor pass/);
+  assert.match(prompt, /Humanizer skill guidance/);
+  assert.match(prompt, /Inject a clear human voice/);
+  assert.match(prompt, /Preserve exact commands, file paths, artifact types, JSON keys, and safety-critical wording/);
 });
 
 test("mapSignalToArtifact explains durable artifact placement", () => {
