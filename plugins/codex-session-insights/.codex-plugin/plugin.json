@@ -1,6 +1,6 @@
 {
   "name": "codex-session-insights",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Generate ephemeral operational dashboards from recent Codex sessions and memory context.",
   "author": {
     "name": "Andreas Cedergren",
