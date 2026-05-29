@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -290,4 +290,23 @@ test("parseArgs supports plan options", () => {
   assert.equal(options.exportFormat, "json");
   assert.equal(options.open, false);
   assert.equal(options.useAi, false);
+});
+
+test("Coach's Read skill preserves the required coaching contract", () => {
+  const skill = readFileSync("skills/coachs-read/SKILL.md", "utf8");
+
+  assert.match(skill, /precomputed Codex session metrics/);
+  assert.match(skill, /Do not read raw Codex session JSONL/);
+  assert.match(skill, /Do not infer identities, private context, root causes, dates, costs, or behavioral patterns/);
+  for (const section of [
+    "Friction Coaching",
+    "Custom Instructions",
+    "Workflow Prompts",
+    "Action Prompts",
+    "Skill/Agent Suggestions",
+    "Effectiveness Metrics",
+  ]) {
+    assert.match(skill, new RegExp(section.replace("/", "\\/")));
+  }
+  assert.match(skill, /Label proxy metrics honestly/);
 });
