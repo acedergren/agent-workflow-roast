@@ -6,11 +6,15 @@ import assert from "node:assert/strict";
 
 import {
   analyzeRows,
+  applyVoiceContract,
   applySessionCwd,
+  buildRecommendations,
   buildCoachingPrompt,
   buildDeterministicInsights,
   buildReport,
+  buildSignals,
   cleanupOldTempReports,
+  hasNearDuplicatePrompts,
   loadInputs,
   mapSignalToArtifact,
   parseArgs,
@@ -97,6 +101,104 @@ test("analyzeRows groups projects, tools, and friction markers", () => {
   assert.ok(stats.tokenSpend.coverage.endDate);
 });
 
+test("buildSignals collapses raw failure markers into one source-backed signal", () => {
+  const stats = analyzeRows(
+    [
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "build error in package step" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failed action needs logs" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failure after rerun" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "auth token check without values" },
+    ],
+    { days: 30 },
+  );
+
+  const signals = buildSignals(stats);
+  const failure = signals.find((signal) => signal.id === "build-action-failures");
+
+  assert.equal(failure.count, 3);
+  assert.deepEqual(
+    signals.map((signal) => signal.id).filter((id) => ["error", "failed", "failure"].includes(id)),
+    [],
+  );
+  assert.ok(failure.examples.length > 0);
+  assert.ok(failure.sourceKinds.includes("friction-marker"));
+});
+
+test("buildRecommendations cites valid signal ids and dedupes copy prompts", () => {
+  const stats = analyzeRows(
+    [
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "build error in package step" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failed action needs logs" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failure after rerun" },
+      { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "auth token check without values" },
+    ],
+    { days: 30 },
+  );
+  const signals = buildSignals(stats);
+  const insights = buildDeterministicInsights(stats, []);
+
+  insights.actionPrompts = [
+    {
+      title: "Create failure triage",
+      artifact: "script",
+      target: "codex-insights",
+      rationale: "Repeated failures need one command path.",
+      prompt: "Inspect this project first: read AGENTS.md, git status, package scripts, and CI logs. Create a failure triage script and run validation.",
+    },
+    {
+      title: "Create failure triage script",
+      artifact: "script",
+      target: "codex-insights",
+      rationale: "Repeated failures need one command path.",
+      prompt: "Inspect this project first: read AGENTS.md, git status, package scripts, and CI logs. Create a failure triage script and run validation.",
+    },
+  ];
+
+  const recommendations = buildRecommendations(stats, insights, signals);
+  const signalIds = new Set(signals.map((signal) => signal.id));
+
+  assert.ok(recommendations.length > 0);
+  assert.equal(hasNearDuplicatePrompts(recommendations), false);
+  for (const recommendation of recommendations) {
+    assert.ok(recommendation.signalIds.length > 0, recommendation.title);
+    assert.ok(recommendation.signalIds.every((id) => signalIds.has(id)), recommendation.title);
+  }
+});
+
+test("applyVoiceContract removes AI tells while preserving commands and paths", () => {
+  const result = applyVoiceContract({
+    summary: "This pivotal workflow landscape unlocks leverage for the team.",
+    nested: {
+      body: "Run npm test and inspect /Users/acedergr/Documents/codex-insights before editing.",
+    },
+  });
+
+  assert.doesNotMatch(result.value.summary, /pivotal|landscape|leverage/i);
+  assert.match(result.value.nested.body, /npm test/);
+  assert.match(result.value.nested.body, /\/Users\/acedergr\/Documents\/codex-insights/);
+  assert.ok(result.review.rewrites.length >= 1);
+});
+
+test("buildReport exposes signals recommendations and voice review with deterministic fallback", () => {
+  const report = buildReport(
+    {
+      rows: [
+        { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "build error in package step" },
+        { timestamp: new Date().toISOString(), cwd: "/tmp/codex-insights", content: "failed action needs logs" },
+      ],
+      malformedRows: 0,
+      memoryText: "",
+      jsonlFiles: [],
+    },
+    { days: 7, includeMemory: false, useAi: false },
+  );
+
+  assert.ok(report.signals.some((signal) => signal.id === "build-action-failures"));
+  assert.ok(report.recommendations.length > 0);
+  assert.equal(hasNearDuplicatePrompts(report.recommendations), false);
+  assert.ok(report.voiceReview);
+});
+
 test("analyzeRows stores short redacted evidence snippets", () => {
   const stats = analyzeRows([
     {
@@ -152,18 +254,25 @@ test("renderers include required report sections", () => {
       content: "blocked retry",
     },
   ]);
+  const signals = buildSignals(stats);
+  const insights = buildDeterministicInsights(stats, []);
+  const recommendations = buildRecommendations(stats, insights, signals);
+  insights.recommendations = recommendations;
   const report = {
     title: "Codex Session Insights (14 days)",
     stats,
     memoryHits: [],
-    insights: buildDeterministicInsights(stats, []),
+    signals,
+    recommendations,
+    voiceReview: applyVoiceContract(insights).review,
+    insights,
   };
 
   const html = renderHtml(report);
   const markdown = renderMarkdown(report);
 
   assert.match(html, /Coaching targets/);
-  assert.match(html, /Top Improvements/);
+  assert.doesNotMatch(html, /Top Improvements/);
   assert.match(html, /Good \/ Bad \/ Ugly/);
   assert.match(html, /Coaching Targets/);
   assert.match(html, /token spend scenario/);
@@ -171,17 +280,20 @@ test("renderers include required report sections", () => {
   assert.match(html, /Dates:/);
   assert.match(html, /Measured:/);
   assert.match(html, /Coach&#39;s Read/);
-  assert.match(html, /Custom Instructions/);
-  assert.match(html, /Create These Artifacts/);
+  assert.match(html, /Top Actions/);
+  assert.match(html, /Prompt Quality/);
+  assert.match(html, /Evidence/);
   assert.match(html, /Why this artifact/);
+  assert.match(html, /Source:/);
   assert.match(html, /data-copy-text/);
   assert.match(html, /Copy prompt/);
-  assert.match(markdown, /Project Workflow Prompts/);
-  assert.match(markdown, /Create These Artifacts/);
+  assert.doesNotMatch(html, /Suggested Instruction Changes/);
+  assert.match(markdown, /Top Actions/);
+  assert.match(markdown, /Evidence/);
+  assert.doesNotMatch(markdown, /Create These Artifacts/);
   assert.match(markdown, /Estimated enterprise API savings/);
   assert.match(markdown, /Why this artifact/);
   assert.match(markdown, /Prompt Quality/);
-  assert.match(markdown, /Codex Settings &gt; Custom instructions|Codex Settings > Custom instructions/);
 });
 
 test("buildCoachingPrompt asks for actionable coaching schema", () => {

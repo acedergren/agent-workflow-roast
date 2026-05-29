@@ -3,3 +3,6 @@ coverage/
 .DS_Store
 codex-insights-report.*
 tmp/
+.tmp/
+test-results/
+playwright-report/

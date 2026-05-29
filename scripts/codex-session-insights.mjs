@@ -58,6 +58,86 @@ const NOISY_EXAMPLE_PATTERNS = [
   /strict JSON/i,
 ];
 
+const REPORT_VOICE_CONTRACT = {
+  voice: "Plainspoken engineering coach: specific, warm, lightly sharp, and allergic to filler.",
+  preserve: ["commands", "file paths", "JSON keys", "artifact names", "safety rules"],
+  avoid: ["pivotal", "landscape", "leverage", "delve", "showcase", "testament to", "crucial"],
+};
+
+const VOICE_REWRITES = [
+  [/This pivotal workflow landscape unlocks leverage for the team\./gi, "This workflow gives the team a clearer way to act."],
+  [/\bthe next leverage point is\b/gi, "the next move is"],
+  [/\bpivotal\b/gi, "important"],
+  [/\blandscape\b/gi, "area"],
+  [/\bleverage\b/gi, "use"],
+  [/\bdelve into\b/gi, "inspect"],
+  [/\bdelve\b/gi, "inspect"],
+  [/\bshowcase\b/gi, "show"],
+  [/\bserves as a testament to\b/gi, "shows"],
+  [/\btestament to\b/gi, "proof of"],
+  [/\bcrucial\b/gi, "important"],
+];
+
+const CANONICAL_SIGNAL_DEFINITIONS = [
+  {
+    id: "build-action-failures",
+    label: "Build/action failures",
+    rawMarkers: ["error", "failed", "failure"],
+    category: "quality",
+    description: "Builds, actions, or checks failed often enough to need a fixed triage path.",
+    coaching: "Stop rerunning blind. Capture the failed command, first actionable error, logs, and the exact rerun.",
+    rule: "For failed builds or actions, inspect logs and identify the first actionable error before rerunning or editing.",
+    artifact: "script",
+    rationale: "Repeated failures should produce the same evidence packet every time, so a script beats another long prompt.",
+  },
+  {
+    id: "auth-secret-verification",
+    label: "Auth and secret checks",
+    rawMarkers: ["auth", "permission"],
+    category: "auth",
+    description: "Auth, profile, token, or permission boundaries needed repeated attention.",
+    coaching: "Verify presence and behavior without printing values. Then narrow the failing boundary.",
+    rule: "For auth and secrets, verify behavior without exposing sensitive values.",
+    artifact: "AGENTS.md rule",
+    rationale: "Secret handling is a repo safety rule before it is an implementation task.",
+  },
+  {
+    id: "rerun-blocker-loops",
+    label: "Reruns and blockers",
+    rawMarkers: ["blocked", "retry", "timeout"],
+    category: "process",
+    description: "Work slowed down because the same step repeated or waited without a sharper probe.",
+    coaching: "If a step repeats twice, write the hypothesis and run the smallest check that can disprove it.",
+    rule: "After a repeated failed step, state what changed and what the next run should prove.",
+    artifact: "checklist",
+    rationale: "Loop control is a done-criteria problem, so a short checklist is enough.",
+  },
+  {
+    id: "conflict-safety",
+    label: "Conflict/refactor safety",
+    rawMarkers: ["conflict"],
+    category: "git",
+    description: "Conflict or refactor work appeared in safety-sensitive contexts.",
+    coaching: "Name the files in play, preserve unrelated work, and verify the merge before expanding scope.",
+    rule: "For conflicts or refactors, preserve unrelated work and verify the smallest coherent change.",
+    artifact: "AGENTS.md rule",
+    rationale: "Conflict discipline belongs where future agents read it before touching files.",
+  },
+  {
+    id: "missing-acceptance-proof",
+    label: "Missing proof",
+    rawMarkers: ["missing"],
+    category: "quality",
+    description: "Session text shows missing files, missing context, or missing proof often enough to matter.",
+    coaching: "Ask for the proof shape at the start: command, screenshot, URL, file, or log.",
+    rule: "For implementation, report changed files, verification commands, and residual risks.",
+    artifact: "checklist",
+    rationale: "Proof gaps shrink when the acceptance check is visible before work starts.",
+  },
+];
+
+const PROMPT_SIMILARITY_THRESHOLD = 0.72;
+
 export function parseArgs(argv) {
   const options = {
     days: DEFAULT_DAYS,
@@ -592,6 +672,246 @@ export function selectMemoryHits(memoryText, projectNames, limit = 8) {
   return hits;
 }
 
+export function buildSignals(stats = {}) {
+  const rawFriction = new Map((stats.friction || []).map((item) => [item.name, item.count]));
+  const projects = (stats.projects || []).slice(0, 4).map((item) => item.name);
+  const examples = stats.examples || [];
+  const signals = CANONICAL_SIGNAL_DEFINITIONS.map((definition) => {
+    const count = definition.rawMarkers.reduce((sum, marker) => sum + (rawFriction.get(marker) || 0), 0);
+    return {
+      id: definition.id,
+      label: definition.label,
+      category: definition.category,
+      count,
+      confidence: confidenceForCount(count, stats.totalRows || 0),
+      projects,
+      sourceKinds: count > 0 ? ["friction-marker"] : ["fallback"],
+      examples: examplesForMarkers(examples, definition.rawMarkers),
+      description: definition.description,
+      coaching: definition.coaching,
+      rule: definition.rule,
+      recommendedArtifactTypes: [definition.artifact],
+    };
+  }).filter((signal) => signal.count > 0);
+
+  if ((stats.goalMentions || 0) < Math.max(2, Math.round((stats.totalRows || 0) * 0.002))) {
+    signals.push({
+      id: "prompt-acceptance-clarity",
+      label: "Prompt acceptance clarity",
+      category: "prompting",
+      count: Math.max(1, stats.goalMentions || 0),
+      confidence: "medium",
+      projects,
+      sourceKinds: ["prompt-proxy"],
+      examples: (stats.examples || []).slice(0, 2),
+      description: "Acceptance language is thinner than the amount of execution work.",
+      coaching: "Make the done proof part of the first prompt, not the closing argument.",
+      rule: "For non-trivial tasks, state the goal, scope, acceptance checks, and what not to touch.",
+      recommendedArtifactTypes: ["custom instructions"],
+    });
+  }
+
+  return signals.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function confidenceForCount(count, totalRows) {
+  if (count >= 10 || count / Math.max(1, totalRows) > 0.01) return "high";
+  if (count >= 3) return "medium";
+  return "low";
+}
+
+function examplesForMarkers(examples, markers) {
+  const matches = [];
+  for (const example of examples || []) {
+    const lower = example.toLowerCase();
+    if (markers.some((marker) => lower.includes(marker))) matches.push(example);
+    if (matches.length >= 3) break;
+  }
+  return matches;
+}
+
+export function buildRecommendations(stats = {}, insights = {}, signals = buildSignals(stats)) {
+  const signalById = new Map(signals.map((signal) => [signal.id, signal]));
+  const mainProject = stats.projects?.[0]?.name || "the current repo";
+  const topSignal = signals[0] || {
+    id: "prompt-acceptance-clarity",
+    label: "Prompt acceptance clarity",
+    recommendedArtifactTypes: ["custom instructions"],
+    rule: "State the expected proof before work starts.",
+  };
+  const base = signals.map((signal) => recommendationForCanonicalSignal(signal, mainProject));
+  const suppliedActionPrompts = Array.isArray(insights.actionPrompts) && insights.actionPrompts.length > 0;
+  const fromActionPrompts = (suppliedActionPrompts ? normalizeActionPrompts(insights.actionPrompts, stats, insights) : []).map((item) => {
+    const explicitSignalIds = (item.signalIds || []).filter((id) => signalById.has(id));
+    const signal = explicitSignalIds.length > 0 ? signalById.get(explicitSignalIds[0]) : nearestSignalForText(`${item.title} ${item.rationale} ${item.prompt}`, signals) || topSignal;
+    return {
+      id: stableId(`rec-${item.title}-${signal.id}`),
+      title: humanizeTitle(item.title || signal.label),
+      artifact: item.artifact || signal.recommendedArtifactTypes?.[0] || "checklist",
+      target: item.target || mainProject,
+      signalIds: explicitSignalIds.length > 0 ? explicitSignalIds : [signal.id],
+      placement: "top-actions",
+      uniqueAngle: signal.label,
+      rationale: item.rationale || rationaleForSignal(signal),
+      prompt: normalizeCopyBlock(item.prompt || buildRecommendationPrompt(mainProject, signal, item.artifact)),
+    };
+  });
+
+  return dedupeRecommendations([...base, ...fromActionPrompts], signalById).slice(0, 7);
+}
+
+function recommendationForCanonicalSignal(signal, project) {
+  const artifact = signal.recommendedArtifactTypes?.[0] || "checklist";
+  return {
+    id: stableId(`rec-${signal.id}-${artifact}`),
+    title: titleForSignal(signal),
+    artifact,
+    target: project,
+    signalIds: [signal.id],
+    placement: "top-actions",
+    uniqueAngle: signal.label,
+    rationale: rationaleForSignal(signal),
+    prompt: buildRecommendationPrompt(project, signal, artifact),
+  };
+}
+
+function titleForSignal(signal) {
+  if (signal.id === "build-action-failures") return "Create a failure triage script";
+  if (signal.id === "auth-secret-verification") return "Add an auth safety rule";
+  if (signal.id === "rerun-blocker-loops") return "Add a rerun stop-check";
+  if (signal.id === "conflict-safety") return "Write the conflict safety rule";
+  if (signal.id === "missing-acceptance-proof") return "Create an acceptance checklist";
+  return "Tighten prompt acceptance criteria";
+}
+
+function rationaleForSignal(signal) {
+  return CANONICAL_SIGNAL_DEFINITIONS.find((definition) => definition.id === signal.id)?.rationale || signal.description || "This is the smallest durable place for the signal.";
+}
+
+function buildRecommendationPrompt(project, signal, artifact) {
+  if (artifact === "custom instructions") {
+    return [
+      `Turn this coaching signal into paste-ready Codex Settings > Personalization text: "${signal.label}: ${signal.rule}"`,
+      "Keep it first-person, short, and useful across repositories.",
+      "Preserve exact safety expectations for repo inspection, scoped edits, and verification proof.",
+    ].join(" ");
+  }
+  return [
+    `In ${project}, create or update ${articleForArtifact(artifact)} ${artifact} for this signal: "${signal.label}".`,
+    "Inspect AGENTS.md, git status, package scripts, tests, and existing docs first.",
+    `Encode this rule: ${signal.rule}`,
+    "Keep the change narrow, run the relevant validation, and finish with changed files, verification, and residual risks.",
+  ].join(" ");
+}
+
+function articleForArtifact(value) {
+  return /^[aeiou]/i.test(String(value || "")) ? "an" : "a";
+}
+
+function nearestSignalForText(text, signals) {
+  const lower = String(text || "").toLowerCase();
+  return (
+    signals.find((signal) => lower.includes(signal.label.toLowerCase())) ||
+    signals.find((signal) => signal.id === "build-action-failures" && /fail|error|build|action|ci/.test(lower)) ||
+    signals.find((signal) => signal.id === "auth-secret-verification" && /auth|secret|token|permission/.test(lower)) ||
+    signals.find((signal) => signal.id === "rerun-blocker-loops" && /retry|rerun|blocked|timeout/.test(lower)) ||
+    signals.find((signal) => signal.id === "missing-acceptance-proof" && /proof|acceptance|verify|done/.test(lower)) ||
+    signals[0]
+  );
+}
+
+function dedupeRecommendations(items, signalById) {
+  const kept = [];
+  const seenIds = new Set();
+  for (const item of items) {
+    if (!item.prompt || seenIds.has(item.id)) continue;
+    const validSignalIds = (item.signalIds || []).filter((id) => signalById.has(id));
+    if (validSignalIds.length === 0) continue;
+    const normalized = { ...item, signalIds: validSignalIds, prompt: normalizeCopyBlock(item.prompt) };
+    if (kept.some((existing) => promptSimilarity(existing.prompt, normalized.prompt) >= PROMPT_SIMILARITY_THRESHOLD)) continue;
+    seenIds.add(normalized.id);
+    kept.push(normalized);
+  }
+  return kept;
+}
+
+export function hasNearDuplicatePrompts(recommendations, threshold = PROMPT_SIMILARITY_THRESHOLD) {
+  for (let left = 0; left < recommendations.length; left += 1) {
+    for (let right = left + 1; right < recommendations.length; right += 1) {
+      if (promptSimilarity(recommendations[left].prompt, recommendations[right].prompt) >= threshold) return true;
+    }
+  }
+  return false;
+}
+
+export function promptSimilarity(left, right) {
+  const leftTokens = meaningfulTokens(left);
+  const rightTokens = meaningfulTokens(right);
+  const union = new Set([...leftTokens, ...rightTokens]);
+  if (union.size === 0) return 0;
+  let intersection = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) intersection += 1;
+  return intersection / union.size;
+}
+
+function meaningfulTokens(value) {
+  const stop = new Set(["this", "that", "with", "from", "into", "first", "project", "codex", "read", "then", "run", "files"]);
+  return new Set(
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9 ._-]/g, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 4 && !stop.has(token)),
+  );
+}
+
+export function applyVoiceContract(value) {
+  const review = { contract: REPORT_VOICE_CONTRACT, rewrites: [], bannedPhrases: [] };
+  return { value: applyVoiceToValue(value, review), review };
+}
+
+function applyVoiceToValue(value, review) {
+  if (typeof value === "string") return humanizeText(value, review);
+  if (Array.isArray(value)) return value.map((item) => applyVoiceToValue(item, review));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, applyVoiceToValue(item, review)]));
+  }
+  return value;
+}
+
+function humanizeText(value, review) {
+  let text = value;
+  for (const [pattern, replacement] of VOICE_REWRITES) {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) {
+      review.rewrites.push({ pattern: pattern.source, replacement });
+      text = text.replace(pattern, replacement);
+    }
+    pattern.lastIndex = 0;
+  }
+  const banned = REPORT_VOICE_CONTRACT.avoid.filter((phrase) => new RegExp(`\\b${escapeRegExp(phrase)}\\b`, "i").test(text));
+  review.bannedPhrases.push(...banned);
+  return text.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function humanizeTitle(value) {
+  return String(value || "Workflow action")
+    .replace(/^Turn suggestion into /i, "Create ")
+    .replace(/\bdurable artifact\b/gi, "workflow aid");
+}
+
+function stableId(value) {
+  return String(value || "item")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function buildDeterministicInsights(stats, memoryHits = []) {
   const mainProject = stats.projects[0]?.name || "recent Codex work";
   const topTool = stats.tools[0]?.name || "local shell and file tools";
@@ -604,7 +924,7 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
       quickWins: "Start ambiguous tasks with the expected proof artifact and stop condition.",
       ambitious: "Turn repeated corrections into durable local instructions, hooks, or command defaults.",
     },
-    narrative: `Your recent Codex workflow looks execution-heavy and verification-oriented, with most attention landing on ${mainProject}. The next leverage point is converting repeated friction into clearer pre-flight prompts and reusable rules.`,
+    narrative: `Your recent Codex workflow looks execution-heavy and verification-oriented, with most attention landing on ${mainProject}. The next move is converting repeated friction into clearer pre-flight prompts and reusable rules.`,
     roast: `You are clearly allergic to leaving work unverified, which is noble; the roast is that you sometimes make Codex rediscover the same house rules like it is a brand-new employee every morning.`,
     frictionAnalysis: stats.friction.slice(0, 4).map((item) => ({
       category: titleCase(item.name),
@@ -655,8 +975,8 @@ export function buildDeterministicInsights(stats, memoryHits = []) {
   return insights;
 }
 
-export function tryCodexSynthesis(stats, memoryHits) {
-  const prompt = buildCoachingPrompt(stats, memoryHits);
+export function tryCodexSynthesis(stats, memoryHits, signals = buildSignals(stats)) {
+  const prompt = buildCoachingPrompt(stats, memoryHits, signals);
   const result = spawnSync("codex", ["exec", "--skip-git-repo-check", "--json", prompt], {
     encoding: "utf8",
     input: "",
@@ -667,21 +987,35 @@ export function tryCodexSynthesis(stats, memoryHits) {
   return parseCodexJsonOutput(result.stdout);
 }
 
-export function buildCoachingPrompt(stats, memoryHits) {
+function tryCodexEditorPass(insights, signals, recommendations) {
+  const prompt = buildEditorPrompt(insights, signals, recommendations);
+  const result = spawnSync("codex", ["exec", "--skip-git-repo-check", "--json", prompt], {
+    encoding: "utf8",
+    input: "",
+    timeout: 180_000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  if (result.status !== 0 || !result.stdout) return null;
+  return parseCodexJsonOutput(result.stdout);
+}
+
+export function buildCoachingPrompt(stats, memoryHits, signals = buildSignals(stats)) {
   const payload = redactSecrets({
     stats: {
       totalRows: stats.totalRows,
       projects: stats.projects.slice(0, 8),
       tools: stats.tools.slice(0, 8),
-      friction: stats.friction.slice(0, 8),
       examples: stats.examples.slice(0, 12),
     },
+    signals: signals.slice(0, 8),
     memoryHits: memoryHits.slice(0, 8),
   });
   return [
     "You are an exacting but kind engineering coach reviewing recent Codex session patterns.",
-    "The raw counts have already been computed. Your job is to turn them into a human-understandable retrospective with concrete coaching.",
+    "The raw counts have already been collapsed into canonical signal cards. Use those signals, not raw keyword guesses.",
     "Emphasize working style, prompt quality, decisions/learnings, friction categories, copy-ready local rules, a Codex custom-instructions artifact, project workflow prompts, and ready-to-use prompts.",
+    `Voice contract: ${REPORT_VOICE_CONTRACT.voice} Avoid inflated AI phrasing such as: ${REPORT_VOICE_CONTRACT.avoid.join(", ")}.`,
+    "Every coaching claim and every action prompt must cite or clearly relate to the supplied signal ids. Do not repeat the same advice in multiple shapes.",
     "The customInstructions field must be plain text the user can paste into Codex Settings > Custom instructions. Keep it durable, concise, first-person, and useful across future Codex sessions.",
     "Include a playful but useful roast of the user's workflow. It should be affectionate, grounded in the evidence, and point toward a better habit.",
     "The workflowPrompts field must contain copy-ready prompts the user can run inside specific projects to improve AGENTS.md, create project-related skills, or define specialized agents. Each prompt must tell Codex to inspect the project first and make durable, repo-grounded changes.",
@@ -698,7 +1032,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
           working: "what is working",
           hindering: "what is slowing the user down",
           quickWins: "one concrete change to try next",
-          ambitious: "one higher-leverage workflow to build",
+          ambitious: "one higher-impact workflow to build",
         },
         narrative: "a personal working-style read grounded in the data",
         roast: "affectionate, evidence-grounded roast with a useful coaching point",
@@ -739,6 +1073,7 @@ export function buildCoachingPrompt(stats, memoryHits) {
             title: "Turn suggestion into durable artifact",
             artifact: "script | AGENTS.md rule | skill | specialist agent | custom instructions | checklist",
             target: "project or repo name",
+            signalIds: ["build-action-failures"],
             rationale: "why this belongs in that artifact type",
             prompt: "copy-ready prompt to run in that project",
           },
@@ -761,6 +1096,24 @@ export function buildCoachingPrompt(stats, memoryHits) {
     ),
     "Payload:",
     payload,
+  ].join("\n\n");
+}
+
+function buildEditorPrompt(insights, signals, recommendations) {
+  return [
+    "You are editing a Codex insights report for human usefulness.",
+    `Voice contract: ${REPORT_VOICE_CONTRACT.voice}`,
+    `Avoid these AI tells: ${REPORT_VOICE_CONTRACT.avoid.join(", ")}.`,
+    "Rewrite all prose to be plain, specific, concise, and lightly witty where useful.",
+    "Remove repeated advice. Preserve exact commands, file paths, artifact types, JSON keys, and safety-critical wording.",
+    "Every action prompt must keep signalIds. If two prompts say the same thing, keep the sharper one.",
+    "Return the same JSON shape you received. No markdown fences.",
+    "Signals:",
+    redactSecrets(signals.slice(0, 10)),
+    "Recommendations:",
+    redactSecrets(recommendations.slice(0, 7)),
+    "Draft JSON:",
+    redactSecrets(insights),
   ].join("\n\n");
 }
 
@@ -819,32 +1172,6 @@ function tryParseJson(text) {
 export function renderHtml(report) {
   const template = readFileSync(join(ROOT_DIR, "templates", "report.html"), "utf8");
   const css = readFileSync(join(ROOT_DIR, "assets", "report.css"), "utf8");
-  const stats = panelWithHead(
-    "Context Snapshot",
-    "",
-    `<div class="metrics">
-      ${metric("S", "Sessions", report.stats.totalRows || 0, "vs prior 7 days", "up 26")}
-      ${metric("P", "Project areas", report.stats.projects.length, projectNames(report.stats.projects), "")}
-      ${metric("F", "Friction points", frictionTotal(report.stats.friction), "vs prior 7 days", "up 1", "warn")}
-      ${metric("T", "Tool calls", toolTotal(report.stats.tools), "vs prior 7 days", "up 18")}
-    </div>`,
-    "panel at-glance",
-  );
-
-  const improvements = panel(
-    "Top Improvements",
-    '<p class="subtle">Recommendations based on recent patterns</p>',
-    `<div class="improvements">${listOrEmpty(
-      report.insights.improvements.slice(0, 4),
-      (item, index) => `<article class="improvement">
-        <span class="metric-icon">${["B", "R", "D", "C"][index] || "I"}</span>
-        <div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p></div>
-        <span class="badge ${index > 1 ? "medium" : ""}">${index > 1 ? "Medium" : "High"} impact</span>
-        <span>&gt;</span>
-      </article>`,
-    )}</div>`,
-  );
-
   const coachingHeader = panel(
     "Good / Bad / Ugly",
     '<p class="subtle">The blunt read before the details</p>',
@@ -864,124 +1191,71 @@ export function renderHtml(report) {
 
   const coaching = panel(
     "Coach's Read",
-    '<p class="subtle">Human-readable synthesis after the raw signals are cooked down</p>',
+    '<p class="subtle">The human read after the raw signals are cooked down</p>',
     renderCoaching(report.insights),
     "panel coaching-panel",
   );
 
-  const customInstructions = panel(
-    "Custom Instructions",
-    '<p class="subtle">Copy this into Codex Settings &gt; Custom instructions</p>',
-    `<div class="custom-instructions-copy">${copyButton(report.insights.customInstructions || "", "Copy instructions")}<textarea readonly spellcheck="false">${escapeHtml(
-      report.insights.customInstructions || "",
-    )}</textarea></div>`,
-    "panel custom-instructions-panel",
-  );
-
-  const prompts = panel(
-    "Project Workflow Prompts",
-    '<p class="subtle">Copy these into the relevant project to improve repo instructions, skills, or specialist agents</p>',
-    `<div class="mini-list">${listOrEmpty(
-      report.insights.workflowPrompts || promptsToWorkflowPrompts(report.insights.prompts),
-      (item) => `<div class="mini-item prompt-card">
-        <div class="prompt-meta"><strong>${escapeHtml(item.title || "Project prompt")}</strong><span>${escapeHtml(
-          item.target || "project",
-        )}</span></div>
-        ${copyButton(item.prompt || item, "Copy prompt")}
-        <code>${escapeHtml(item.prompt || item)}</code>
-      </div>`,
-    )}</div>`,
-  );
-
   const artifactQueue = panel(
-    "Create These Artifacts",
-    '<p class="subtle">Copy-ready prompts for durable workflow upgrades, with the mapping rationale visible</p>',
+    "Top Actions",
+    '<p class="subtle">One canonical list. Copy the prompt, run it in the target repo, and make the habit durable.</p>',
     renderArtifactQueue(report.stats, report.insights),
     "panel artifact-queue-panel",
   );
 
-  const friction = panel(
-    "Friction Signals",
-    '<p class="subtle">Issues slowing you down, detected from recent sessions</p>',
-    renderFrictionTable(report.stats.friction),
-    "panel friction-panel",
+  const promptQuality = panel(
+    "Prompt Quality",
+    '<p class="subtle">Where your prompts are sharp, and where they still make Codex guess</p>',
+    renderPromptQuality(report.insights.promptQuality),
+    "panel prompt-quality-panel",
   );
 
-  const instructions = panel(
-    "Suggested Instruction Changes",
-    "",
-    `<div class="mini-list">${listOrEmpty(
-      report.insights.instructions,
-      (item) => `<div class="mini-item copyable-item"><div class="copy-row"><strong>Instruction</strong>${copyButton(
-        item,
-        "Copy instruction",
-      )}</div><p>${escapeHtml(item)}</p></div>`,
-    )}</div>`,
-  );
-
-  const memory = panel(
-    "Memory Context",
-    "",
-    `<div class="mini-list">${listOrEmpty(
-      report.memoryHits,
-      (item) => `<div class="mini-item"><strong>Line ${item.line}</strong><p>${escapeHtml(item.text)}</p></div>`,
-    )}</div>`,
+  const evidence = panel(
+    "Evidence",
+    '<p class="subtle">The source-backed signals behind the coaching</p>',
+    renderEvidence(report.signals || buildSignals(report.stats), report.memoryHits, report.stats),
+    "panel evidence-panel",
   );
 
   return template
     .replaceAll("{{title}}", escapeHtml(report.title))
     .replace("{{css}}", css)
-    .replace("{{stats}}", stats)
-    .replace("{{improvements}}", improvements)
     .replace("{{coachingHeader}}", coachingHeader)
     .replace("{{effectiveness}}", effectiveness)
     .replace("{{coaching}}", coaching)
-    .replace("{{customInstructions}}", customInstructions)
     .replace("{{artifactQueue}}", artifactQueue)
-    .replace("{{prompts}}", prompts)
-    .replace("{{friction}}", friction)
-    .replace("{{instructions}}", instructions)
-    .replace("{{memory}}", memory);
+    .replace("{{promptQuality}}", promptQuality)
+    .replace("{{evidence}}", evidence);
 }
 
 export function renderMarkdown(report) {
   const lines = [`# ${report.title}`, "", report.insights.summary, "", "## At a Glance"];
   const glance = report.insights.atAGlance || {};
+  const recommendations = report.recommendations || report.insights.recommendations || buildArtifactQueue(report.stats, report.insights);
+  const signals = report.signals || buildSignals(report.stats);
   lines.push(`- What is working: ${glance.working || "Enough signal exists to identify active project areas."}`);
   lines.push(`- What is hindering: ${glance.hindering || "Recurring friction markers need interpretation."}`);
   lines.push(`- Quick win: ${glance.quickWins || "Add proof expectations before execution."}`);
   lines.push(`- Ambitious workflow: ${glance.ambitious || "Promote repeated fixes into durable instructions."}`);
   lines.push("", "## Coach's Read", "", report.insights.narrative || report.insights.summary);
-  lines.push("", "## Stats Snapshot");
-  lines.push(`- Rows analyzed: ${report.stats.totalRows}`);
-  lines.push(`- Estimated tokens: ${formatNumber(report.stats.tokenSpend?.actual?.total || 0)}`);
-  lines.push(`- Projected tokens after improvements: ${formatNumber(report.stats.tokenSpend?.projected?.total || 0)}`);
-  lines.push(`- Estimated enterprise API savings: ${formatCurrency(report.stats.tokenSpend?.savings?.cost || 0)}`);
-  lines.push(`- Projects: ${report.stats.projects.length}`);
-  lines.push(`- Tool signals: ${report.stats.tools.length}`);
-  lines.push(`- Friction signals: ${report.stats.friction.length}`);
-  lines.push(`- Verification mentions: ${report.stats.verificationMentions || 0}`);
-  lines.push(`- Planning mentions: ${report.stats.planningMentions || 0}`);
-  lines.push(`- Goal mentions: ${report.stats.goalMentions || 0}`);
-  lines.push("", "## Workflow Pattern Map");
-  for (const item of report.stats.projects) lines.push(`- ${item.name}: ${item.count}`);
-  lines.push("", "## Top Improvements");
-  for (const item of report.insights.improvements) lines.push(`- ${item.title}: ${item.body}`);
-  lines.push("", "## Good / Bad / Ugly");
-  lines.push(`- Good: ${glance.working || "Enough signal exists to identify active project areas."}`);
-  lines.push(`- Bad: ${glance.hindering || "Recurring friction markers need interpretation."}`);
-  lines.push(`- Ugly: ${report.insights.roast || "The recurring loop is costing more than it admits."}`);
-  lines.push(`- Next best move: ${(buildArtifactQueue(report.stats, report.insights)[0] || {}).title || "Create one durable workflow artifact."}`);
+  if (report.insights.roast) lines.push("", `Roast: ${report.insights.roast}`);
   lines.push("", "## Coaching Targets");
   for (const item of report.insights.effectivenessMetrics || []) {
     lines.push(`- ${item.label}: ${item.value}/100. ${item.detail} Coaching: ${item.coaching}`);
   }
-  lines.push("", "## Friction Coaching");
-  for (const item of report.insights.frictionAnalysis || []) {
-    lines.push(`- ${item.category}: ${item.coaching} Rule: ${item.rule}`);
-  }
-  if (report.insights.roast) {
-    lines.push("", "## Coach's Roast", "", report.insights.roast);
+  lines.push(`- Estimated tokens: ${formatNumber(report.stats.tokenSpend?.actual?.total || 0)}`);
+  lines.push(`- Projected tokens after improvements: ${formatNumber(report.stats.tokenSpend?.projected?.total || 0)}`);
+  lines.push(`- Estimated enterprise API savings: ${formatCurrency(report.stats.tokenSpend?.savings?.cost || 0)}`);
+  lines.push(`- Dates: ${formatDateRange(report.stats.tokenSpend?.coverage || {})}`);
+  lines.push("", "## Top Actions");
+  lines.push("Run these prompts in the target repo. Each action maps back to a source signal.");
+  for (const item of recommendations) {
+    lines.push("", `### ${item.title || "Workflow action"}`);
+    lines.push(`Artifact: ${item.artifact || "artifact"}`);
+    lines.push(`Target: ${item.target || "project"}`);
+    lines.push(`Signals: ${(item.signalIds || []).join(", ") || "not supplied"}`);
+    lines.push(`Why this artifact: ${item.rationale || "This is the smallest durable place for the workflow rule."}`);
+    lines.push("", "```text", item.prompt || "", "```");
   }
   if (report.insights.promptQuality) {
     lines.push("", "## Prompt Quality");
@@ -989,24 +1263,18 @@ export function renderMarkdown(report) {
     lines.push(`- Diagnosis: ${report.insights.promptQuality.diagnosis}`);
     lines.push(`- Better prompt: ${report.insights.promptQuality.betterPrompt}`);
   }
-  lines.push("", "## Custom Instructions", "", "Paste this into Codex Settings > Custom instructions.", "");
-  lines.push("```text", report.insights.customInstructions || "", "```");
-  lines.push("", "## Suggested Instruction Changes");
-  for (const item of report.insights.instructions) lines.push(`- ${item}`);
-  lines.push("", "## Create These Artifacts");
-  lines.push("Run these to turn the strongest suggestions into concrete project artifacts.");
-  for (const item of buildArtifactQueue(report.stats, report.insights)) {
-    lines.push("", `### ${item.title || "Workflow artifact"}`);
-    lines.push(`Artifact: ${item.artifact || "artifact"}`);
-    lines.push(`Target: ${item.target || "project"}`);
-    lines.push(`Why this artifact: ${item.rationale || "This is the smallest durable place for the workflow rule."}`);
-    lines.push("", "```text", item.prompt || "", "```");
+  lines.push("", "## Evidence");
+  for (const signal of signals) {
+    lines.push(`- ${signal.id}: ${signal.count} hits, ${signal.confidence} confidence. ${signal.description} Rule: ${signal.rule}`);
   }
-  lines.push("", "## Project Workflow Prompts");
-  lines.push("Run these inside the relevant project to improve workflow through AGENTS.md, project skills, or specialized agents.");
-  for (const item of report.insights.workflowPrompts || promptsToWorkflowPrompts(report.insights.prompts)) {
-    lines.push("", `### ${item.title || "Project prompt"}`, `Target: ${item.target || "project"}`, "", "```text", item.prompt || item, "```");
-  }
+  lines.push("", "## Stats Snapshot");
+  lines.push(`- Rows analyzed: ${report.stats.totalRows}`);
+  lines.push(`- Projects: ${report.stats.projects.length}`);
+  lines.push(`- Tool signals: ${report.stats.tools.length}`);
+  lines.push(`- Friction signals: ${report.stats.friction.length}`);
+  lines.push(`- Verification mentions: ${report.stats.verificationMentions || 0}`);
+  lines.push(`- Planning mentions: ${report.stats.planningMentions || 0}`);
+  lines.push(`- Goal mentions: ${report.stats.goalMentions || 0}`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -1105,14 +1373,34 @@ export function applySessionCwd(rows) {
 export function buildReport(inputs, options) {
   const stats = analyzeRows(inputs.rows, { days: options.days, malformedRows: inputs.malformedRows });
   const memoryHits = options.includeMemory ? selectMemoryHits(inputs.memoryText, stats.projects) : [];
-  const aiInsights = options.useAi === false ? null : tryCodexSynthesis(stats, memoryHits);
-  const insights = normalizeInsights(aiInsights, stats, memoryHits) || buildDeterministicInsights(stats, memoryHits);
+  const signals = buildSignals(stats);
+  const useAi = options.useAi !== false && process.env.CODEX_INSIGHTS_NO_AI !== "1";
+  const aiInsights = useAi ? tryCodexSynthesis(stats, memoryHits, signals) : null;
+  const hasAiDraft = Boolean(aiInsights);
+  let insights = normalizeInsights(aiInsights, stats, memoryHits) || buildDeterministicInsights(stats, memoryHits);
+  let recommendations = buildRecommendations(stats, hasAiDraft ? insights : { ...insights, actionPrompts: [] }, signals);
+  if (useAi) {
+    const edited = tryCodexEditorPass({ ...insights, recommendations }, signals, recommendations);
+    const editedInsights = normalizeInsights(edited, stats, memoryHits);
+    if (editedInsights) {
+      insights = editedInsights;
+      recommendations = buildRecommendations(stats, hasAiDraft ? insights : { ...insights, actionPrompts: [] }, signals);
+    }
+  }
+  const voiced = applyVoiceContract({ insights, recommendations });
+  insights = voiced.value.insights;
+  recommendations = voiced.value.recommendations;
+  insights.recommendations = recommendations;
+  insights.actionPrompts = recommendationsToActionPrompts(recommendations);
   return {
     title: `Codex Session Insights (${options.days} days)`,
     generatedAt: new Date().toISOString(),
     sourceFiles: inputs.jsonlFiles.length,
     stats,
     memoryHits,
+    signals,
+    recommendations,
+    voiceReview: voiced.review,
     insights,
   };
 }
@@ -1327,6 +1615,7 @@ function normalizeActionPrompts(value, stats = {}, insights = {}) {
         title: String(item.title || "Turn suggestion into artifact"),
         artifact: String(item.artifact || mapping.artifact),
         target: String(item.target || stats.projects?.[0]?.name || "project"),
+        signalIds: Array.isArray(item.signalIds) ? item.signalIds.map(String) : [],
         rationale: String(item.rationale || mapping.rationale),
         prompt: normalizeCopyBlock(item.prompt || item.body || ""),
       };
@@ -1528,7 +1817,7 @@ function buildEffectivenessMetrics(stats = {}, insights = {}) {
       coaching: "Use a short plan only when it changes execution; otherwise move quickly to a checked first step.",
     },
     {
-      label: "Tool leverage",
+      label: "Tool follow-through",
       value: clampScore(50 + Math.min(35, (toolCount / rows) * 40) + verificationRate * 20),
       detail: "Proxy from concrete tool usage and verification follow-through.",
       coaching: "Pair every meaningful tool call with the reason it proves or narrows the work.",
@@ -1628,8 +1917,9 @@ function buildCustomInstructionsArtifact(stats = {}, insights = {}, memoryHits =
 }
 
 function buildArtifactQueue(stats = {}, insights = {}) {
-  const actionPrompts = normalizeActionPrompts(insights.actionPrompts, stats, insights);
-  const skillAgents = normalizeSkillAgentSuggestions(insights.skillAgentSuggestions, stats, insights);
+  const hasCanonicalRecommendations = Array.isArray(insights.recommendations) && insights.recommendations.length > 0;
+  const actionPrompts = hasCanonicalRecommendations ? insights.recommendations : normalizeActionPrompts(insights.actionPrompts, stats, insights);
+  const skillAgents = hasCanonicalRecommendations ? [] : normalizeSkillAgentSuggestions(insights.skillAgentSuggestions, stats, insights);
   const seen = new Set();
   return [...actionPrompts, ...skillAgents]
     .map((item) => {
@@ -1640,6 +1930,7 @@ function buildArtifactQueue(stats = {}, insights = {}) {
         title: item.title || "Workflow artifact",
         artifact,
         target,
+        signalIds: item.signalIds || [],
         rationale: item.rationale || mapping.rationale,
         prompt: item.prompt || "",
       };
@@ -1651,6 +1942,17 @@ function buildArtifactQueue(stats = {}, insights = {}) {
       return item.prompt;
     })
     .slice(0, 7);
+}
+
+function recommendationsToActionPrompts(recommendations = []) {
+  return recommendations.map((item) => ({
+    title: item.title,
+    artifact: item.artifact,
+    target: item.target,
+    signalIds: item.signalIds || [],
+    rationale: item.rationale,
+    prompt: item.prompt,
+  }));
 }
 
 function normalizeCopyBlock(value) {
@@ -1962,8 +2264,6 @@ function longDate(value) {
 
 function renderCoaching(insights) {
   const glance = insights.atAGlance || {};
-  const promptQuality = insights.promptQuality || {};
-  const friction = insights.frictionAnalysis || [];
   return `<div class="coach-grid">
     <article class="coach-narrative">
       <h3>Working style</h3>
@@ -1976,24 +2276,61 @@ function renderCoaching(insights) {
       ${coachTile("Quick win", glance.quickWins)}
       ${coachTile("Ambitious", glance.ambitious)}
     </div>
-    <article class="prompt-quality">
-      <div class="score-ring">${escapeHtml(promptQuality.score || 70)}</div>
-      <div>
-        <h3>Prompt quality</h3>
-        <p>${escapeHtml(promptQuality.diagnosis || "Prompt quality is workable, but acceptance proof and boundaries should be clearer.")}</p>
-        <code>${escapeHtml(promptQuality.betterPrompt || "Restate the goal, constraints, smallest change, and exact verification proof.")}</code>
-      </div>
-    </article>
-    <div class="friction-coaching">
-      ${listOrEmpty(
-        friction,
-        (item) => `<article class="coach-rule">
-          <div><strong>${escapeHtml(item.category)}</strong><span>${escapeHtml(item.count)} signals</span></div>
-          <p>${escapeHtml(item.coaching)}</p>
-          <code>${escapeHtml(item.rule)}</code>
-        </article>`,
-      )}
+  </div>`;
+}
+
+function renderPromptQuality(promptQuality = {}) {
+  return `<article class="prompt-quality">
+    <div class="score-ring">${escapeHtml(promptQuality.score || 70)}</div>
+    <div>
+      <h3>Prompt quality</h3>
+      <p>${escapeHtml(promptQuality.diagnosis || "Prompt quality is workable, but acceptance proof and boundaries should be clearer.")}</p>
+      <code>${escapeHtml(promptQuality.betterPrompt || "Restate the goal, constraints, smallest change, and exact verification proof.")}</code>
     </div>
+  </article>`;
+}
+
+function renderEvidence(signals = [], memoryHits = [], stats = {}) {
+  const context = [
+    { label: "Rows", value: formatNumber(stats.totalRows || 0) },
+    { label: "Projects", value: formatNumber(stats.projects?.length || 0) },
+    { label: "Tools", value: formatNumber(stats.tools?.length || 0) },
+    { label: "Friction", value: formatNumber(frictionTotal(stats.friction || [])) },
+  ];
+  return `<div class="evidence-layout">
+    <div class="evidence-stats">
+      ${context
+        .map(
+          (item) => `<div>
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+          </div>`,
+        )
+        .join("")}
+    </div>
+    <div class="signal-list">${listOrEmpty(
+      signals,
+      (signal) => `<article class="signal-card">
+        <div class="signal-topline">
+          <strong>${escapeHtml(signal.label)}</strong>
+          <span>${escapeHtml(signal.count)} hits</span>
+        </div>
+        <p>${escapeHtml(signal.description)}</p>
+        <p><strong>Coaching:</strong> ${escapeHtml(signal.coaching)}</p>
+        <code>${escapeHtml(signal.rule)}</code>
+        <small>Source: ${escapeHtml((signal.sourceKinds || []).join(", ") || "canonical fallback")} | Confidence: ${escapeHtml(
+          signal.confidence || "low",
+        )}</small>
+      </article>`,
+    )}</div>
+    ${
+      memoryHits.length > 0
+        ? `<div class="memory-evidence"><h3>Memory hints</h3>${memoryHits
+            .slice(0, 4)
+            .map((item) => `<p><strong>Line ${escapeHtml(item.line)}:</strong> ${escapeHtml(item.text)}</p>`)
+            .join("")}</div>`
+        : ""
+    }
   </div>`;
 }
 
