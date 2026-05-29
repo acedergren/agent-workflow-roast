@@ -19,7 +19,7 @@ Reports are local-first and temporary by default. Durable files are written only
 Install the plugin from the public repo marketplace:
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref main
+codex plugin marketplace add acedergren/codex-insights --ref v0.1.1
 codex plugin add codex-session-insights@codex-insights
 ```
 

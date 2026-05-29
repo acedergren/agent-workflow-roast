@@ -1,6 +1,6 @@
 {
   "name": "codex-insights",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local Codex plugin for ephemeral session insights reports.",
   "type": "module",
   "private": false,
