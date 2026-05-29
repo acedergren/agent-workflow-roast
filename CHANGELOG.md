@@ -2,6 +2,26 @@
 
 All notable changes to Codex Insights are documented here.
 
+## [0.1.4] - 2026-05-29
+
+### Added
+
+- Added humanizer guidance directly to the LLM system prompt used for insight synthesis.
+- Added the same humanizer guidance to the editor/dedupe pass so generated report prose is clearer, more specific, and less AI-shaped.
+- Added regression tests that verify both prompt passes include the humanizer instructions.
+
+### Changed
+
+- Expanded the banned AI-tell list used by deterministic cleanup to catch phrases such as `underscores`, `foster`, `garner`, `intricate`, `tapestry`, `serves as`, and `stands as`.
+- Updated the README install path to use `v0.1.4`.
+
+### Verification
+
+- `npm test`
+- `npm run validate:plugin`
+- `git diff --check`
+- Fresh AI-enabled report generation to `codex-insights.html`
+
 ## [0.1.3] - 2026-05-29
 
 ### Fixed

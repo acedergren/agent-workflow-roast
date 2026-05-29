@@ -19,11 +19,11 @@ Reports are local-first. The HTML dashboard is always written as `codex-insights
 Install the plugin from the public repo marketplace:
 
 ```bash
-codex plugin marketplace add acedergren/codex-insights --ref v0.1.3
+codex plugin marketplace add acedergren/codex-insights --ref v0.1.4
 codex plugin add codex-session-insights@codex-insights
 ```
 
-If you added the marketplace before `v0.1.3`, refresh it first:
+If you added the marketplace before `v0.1.4`, refresh it first:
 
 ```bash
 codex plugin marketplace upgrade codex-insights
@@ -68,7 +68,7 @@ Copy buttons are included for copy-ready sections in the HTML report.
 
 ## Current Release
 
-`v0.1.3` fixes the public marketplace packaging so `codex plugin add codex-session-insights@codex-insights` discovers and installs the plugin. See [CHANGELOG.md](CHANGELOG.md) for release notes.
+`v0.1.4` adds Humanizer guidance to the LLM prompts that generate and edit the report, so coaching copy should read more like a specific engineer and less like generic model prose. See [CHANGELOG.md](CHANGELOG.md) and [RELEASE_NOTES.md](RELEASE_NOTES.md) for details.
 
 ## Token Accounting
 
