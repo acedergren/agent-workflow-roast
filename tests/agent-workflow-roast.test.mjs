@@ -664,4 +664,13 @@ test("marketplace catalog points at the installable plugin package", () => {
   assert.equal(existsSync("plugins/agent-workflow-roast/.codex-plugin/plugin.json"), true);
   assert.equal(existsSync("plugins/agent-workflow-roast/commands/roast.md"), true);
   assert.equal(existsSync("plugins/agent-workflow-roast/scripts/agent-workflow-roast.mjs"), true);
+  assert.equal(existsSync("plugins/agent-workflow-roast/skills/roast/SKILL.md"), true);
+  assert.equal(existsSync("plugins/agent-workflow-roast/skills/coachs-read/SKILL.md"), false);
+});
+
+test("roast skill handles precomputed report coaching without reading raw sessions", () => {
+  const skill = readFileSync("plugins/agent-workflow-roast/skills/roast/SKILL.md", "utf8");
+
+  assert.match(skill, /precomputed metrics and redacted report content/);
+  assert.match(skill, /Do not read raw session JSONL/);
 });

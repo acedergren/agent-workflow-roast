@@ -2,6 +2,20 @@
 
 All notable changes to Agent Workflow Roast are documented here.
 
+## [0.2.2] - 2026-05-30
+
+### Added
+
+- Added the cartoon Agent Workflow Roast icon to the README and plugin assets.
+
+### Changed
+
+- Folded the precomputed-report privacy guidance into the main `roast` skill.
+
+### Removed
+
+- Removed the separate `coachs-read` skill so users have one primary plugin entry point.
+
 ## [0.2.1] - 2026-05-29
 
 ### Changed

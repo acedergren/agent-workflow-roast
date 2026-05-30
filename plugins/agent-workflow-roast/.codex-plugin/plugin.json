@@ -1,6 +1,6 @@
 {
   "name": "agent-workflow-roast",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A coaching report for your agent workflow, with receipts.",
   "author": {
     "name": "Andreas Cedergren",
